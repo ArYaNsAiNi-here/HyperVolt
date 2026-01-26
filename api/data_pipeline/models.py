@@ -134,3 +134,118 @@ class EnergySource(models.Model):
 
     def __str__(self):
         return f"{self.source_type} ({'Available' if self.is_available else 'Unavailable'})"
+
+
+class Load(models.Model):
+    """
+    Model for tracking electrical loads and their characteristics.
+    Used by the energy optimizer to make informed switching decisions.
+    """
+    PRIORITY_CHOICES = [
+        (100, 'Critical'),    # Security, communication, medical
+        (75, 'High'),         # HVAC, refrigeration, water pump
+        (50, 'Medium'),       # Lighting, computing, cooking
+        (25, 'Low'),          # Entertainment, decorative, optional
+    ]
+    
+    CATEGORY_CHOICES = [
+        ('hvac', 'HVAC System'),
+        ('lighting', 'Lighting'),
+        ('appliance', 'Appliance'),
+        ('computing', 'Computing'),
+        ('entertainment', 'Entertainment'),
+        ('security', 'Security System'),
+        ('communication', 'Communication'),
+        ('other', 'Other'),
+    ]
+    
+    name = models.CharField(max_length=100, unique=True, help_text="Load identifier (e.g., 'Living Room HVAC')")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='other')
+    priority = models.IntegerField(choices=PRIORITY_CHOICES, default=50, help_text="Load priority level")
+    rated_power = models.FloatField(help_text="Rated power consumption in watts")
+    current_power = models.FloatField(default=0, help_text="Current power consumption in watts")
+    
+    # Current state
+    is_active = models.BooleanField(default=False, help_text="Whether the load is currently active")
+    current_source = models.CharField(
+        max_length=20, 
+        choices=EnergySource.SOURCE_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Current energy source powering this load"
+    )
+    
+    # Optimization hints
+    can_defer = models.BooleanField(default=False, help_text="Can this load be deferred to off-peak times?")
+    min_runtime = models.IntegerField(default=0, help_text="Minimum continuous runtime in minutes")
+    
+    location = models.CharField(max_length=100, blank=True, help_text="Physical location of the load")
+    notes = models.TextField(blank=True, help_text="Additional notes about this load")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-priority', 'name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_priority_display()}, {self.rated_power}W)"
+
+
+class SourceSwitchEvent(models.Model):
+    """
+    Model for tracking energy source switching events.
+    Provides audit trail and analytics for optimization decisions.
+    """
+    load = models.ForeignKey(Load, on_delete=models.CASCADE, related_name='switch_events')
+    from_source = models.CharField(
+        max_length=20,
+        choices=EnergySource.SOURCE_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Previous energy source"
+    )
+    to_source = models.CharField(
+        max_length=20,
+        choices=EnergySource.SOURCE_TYPE_CHOICES,
+        help_text="New energy source"
+    )
+    
+    reason = models.TextField(help_text="Reason for the switch")
+    triggered_by = models.CharField(
+        max_length=20,
+        choices=[
+            ('manual', 'Manual'),
+            ('automatic', 'Automatic'),
+            ('ai', 'AI Decision'),
+            ('emergency', 'Emergency'),
+        ],
+        default='automatic'
+    )
+    
+    # Performance metrics
+    expected_savings = models.FloatField(
+        null=True, 
+        blank=True, 
+        help_text="Expected cost/carbon savings"
+    )
+    actual_savings = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Actual savings (filled in later)"
+    )
+    
+    success = models.BooleanField(default=True, help_text="Whether the switch was successful")
+    error_message = models.TextField(blank=True, help_text="Error details if switch failed")
+    
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['load', '-timestamp']),
+            models.Index(fields=['to_source', '-timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"{self.load.name}: {self.from_source or 'None'} → {self.to_source} at {self.timestamp}"

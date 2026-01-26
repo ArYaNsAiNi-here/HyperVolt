@@ -5,15 +5,18 @@ from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import SensorReading, GridData, UserPreferences, AIDecision, EnergySource
+from .models import SensorReading, GridData, UserPreferences, AIDecision, EnergySource, Load, SourceSwitchEvent
 from .serializers import (
     SensorReadingSerializer,
     GridDataSerializer,
     UserPreferencesSerializer,
     AIDecisionSerializer,
-    EnergySourceSerializer
+    EnergySourceSerializer,
+    LoadSerializer,
+    SourceSwitchEventSerializer
 )
 from .services.cache_manager import SensorBufferManager
+from .services.energy_optimizer import EnergySourceOptimizer
 
 
 class SensorReadingViewSet(viewsets.ModelViewSet):
@@ -221,3 +224,231 @@ class EnergySourceViewSet(viewsets.ModelViewSet):
         queryset = self.queryset.filter(is_available=True)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class LoadViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Load model.
+    Manages electrical loads and their characteristics.
+    """
+    queryset = Load.objects.all()
+    serializer_class = LoadSerializer
+    filterset_fields = ['category', 'priority', 'is_active']
+    ordering_fields = ['priority', 'rated_power', 'name']
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get all currently active loads."""
+        queryset = self.queryset.filter(is_active=True)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def high_priority(self, request):
+        """Get all high and critical priority loads."""
+        queryset = self.queryset.filter(priority__gte=75)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def recommend_source(self, request, pk=None):
+        """
+        Get energy source recommendation for this specific load.
+        
+        This endpoint allows Module 3 (AI) to override with ML-based recommendations.
+        """
+        load = self.get_object()
+        optimizer = EnergySourceOptimizer()
+        
+        recommendation = optimizer.recommend_source_for_load(
+            load_name=load.name,
+            load_priority=load.priority,
+            load_power=load.rated_power
+        )
+        
+        return Response(recommendation)
+    
+    @action(detail=True, methods=['post'])
+    def check_switch(self, request, pk=None):
+        """
+        Check if switching energy source is recommended for this load.
+        """
+        load = self.get_object()
+        
+        if not load.current_source:
+            return Response({
+                'error': 'Load has no current source assigned'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        optimizer = EnergySourceOptimizer()
+        switch_recommendation = optimizer.should_switch_source(
+            current_source=load.current_source,
+            load_name=load.name,
+            load_priority=load.priority
+        )
+        
+        return Response(switch_recommendation)
+
+
+class SourceSwitchEventViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for SourceSwitchEvent model.
+    Tracks energy source switching history and analytics.
+    """
+    queryset = SourceSwitchEvent.objects.all()
+    serializer_class = SourceSwitchEventSerializer
+    filterset_fields = ['load', 'to_source', 'triggered_by', 'success']
+    ordering_fields = ['timestamp']
+    
+    @action(detail=False, methods=['get'])
+    def recent(self, request):
+        """Get recent switch events."""
+        hours = int(request.query_params.get('hours', 24))
+        start_time = timezone.now() - timedelta(hours=hours)
+        
+        queryset = self.queryset.filter(timestamp__gte=start_time)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_load(self, request):
+        """Get switch events grouped by load."""
+        load_id = request.query_params.get('load_id')
+        
+        if not load_id:
+            return Response({
+                'error': 'load_id parameter required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        queryset = self.queryset.filter(load_id=load_id)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class EnergyOptimizationViewSet(viewsets.ViewSet):
+    """
+    ViewSet for energy optimization operations.
+    Provides recommendations and analytics for energy source selection.
+    
+    This is the main interface for Module 3 (AI) integration.
+    """
+    
+    @action(detail=False, methods=['post'])
+    def recommend(self, request):
+        """
+        Get energy source recommendation for a load.
+        
+        Request body:
+        {
+            "load_name": "HVAC Living Room",
+            "load_priority": 75,
+            "load_power": 2000
+        }
+        """
+        load_name = request.data.get('load_name')
+        load_priority = request.data.get('load_priority', 50)
+        load_power = request.data.get('load_power', 0)
+        
+        if not load_name:
+            return Response({
+                'error': 'load_name is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        optimizer = EnergySourceOptimizer()
+        recommendation = optimizer.recommend_source_for_load(
+            load_name=load_name,
+            load_priority=load_priority,
+            load_power=load_power
+        )
+        
+        return Response(recommendation)
+    
+    @action(detail=False, methods=['get'])
+    def context(self, request):
+        """
+        Get current context for energy optimization.
+        
+        Returns all relevant data: sensors, weather, carbon, energy sources.
+        Module 3 (AI) can use this to make informed decisions.
+        """
+        optimizer = EnergySourceOptimizer()
+        context = optimizer.gather_context()
+        
+        return Response(context)
+    
+    @action(detail=False, methods=['get'])
+    def distribution(self, request):
+        """
+        Get optimal distribution of loads across energy sources.
+        
+        This is a placeholder for Module 3 (AI) to implement sophisticated
+        load balancing algorithms.
+        """
+        optimizer = EnergySourceOptimizer()
+        distribution = optimizer.get_optimal_source_distribution()
+        
+        return Response(distribution)
+    
+    @action(detail=False, methods=['post'])
+    def execute_switch(self, request):
+        """
+        Execute an energy source switch for a load.
+        
+        Request body:
+        {
+            "load_id": 1,
+            "to_source": "solar",
+            "reason": "High solar availability",
+            "triggered_by": "ai"
+        }
+        
+        This endpoint records the switch event. Module 1 (Hardware) will
+        actually perform the physical switching via MQTT commands.
+        """
+        load_id = request.data.get('load_id')
+        to_source = request.data.get('to_source')
+        reason = request.data.get('reason', 'Automatic optimization')
+        triggered_by = request.data.get('triggered_by', 'automatic')
+        
+        if not load_id or not to_source:
+            return Response({
+                'error': 'load_id and to_source are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            load = Load.objects.get(id=load_id)
+        except Load.DoesNotExist:
+            return Response({
+                'error': 'Load not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Record the switch event
+        switch_event = SourceSwitchEvent.objects.create(
+            load=load,
+            from_source=load.current_source,
+            to_source=to_source,
+            reason=reason,
+            triggered_by=triggered_by,
+        )
+        
+        # Update load's current source
+        load.current_source = to_source
+        load.save()
+        
+        serializer = SourceSwitchEventSerializer(switch_event)
+        
+        return Response({
+            'message': 'Switch recorded successfully',
+            'switch_event': serializer.data,
+            'mqtt_command': {
+                'topic': f'HyperVolt/commands/load_{load.id}',
+                'payload': {
+                    'command': 'switch_source',
+                    'load_id': load.id,
+                    'load_name': load.name,
+                    'to_source': to_source,
+                    'timestamp': timezone.now().isoformat(),
+                }
+            },
+            'note': 'Module 1 (Hardware) should subscribe to MQTT commands and execute the physical switch'
+        }, status=status.HTTP_201_CREATED)

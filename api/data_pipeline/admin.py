@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import SensorReading, GridData, UserPreferences, AIDecision, EnergySource
+from .models import SensorReading, GridData, UserPreferences, AIDecision, EnergySource, Load, SourceSwitchEvent
 
 
 @admin.register(SensorReading)
@@ -39,3 +39,35 @@ class EnergySourceAdmin(admin.ModelAdmin):
     list_display = ('source_type', 'is_available', 'current_output', 'priority', 'updated_at')
     list_filter = ('source_type', 'is_available')
     ordering = ('-priority',)
+
+
+@admin.register(Load)
+class LoadAdmin(admin.ModelAdmin):
+    list_display = ('name', 'category', 'priority', 'rated_power', 'is_active', 'current_source')
+    list_filter = ('category', 'priority', 'is_active', 'current_source')
+    search_fields = ('name', 'location', 'notes')
+    ordering = ('-priority', 'name')
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'category', 'location', 'notes')
+        }),
+        ('Power Characteristics', {
+            'fields': ('rated_power', 'current_power', 'priority')
+        }),
+        ('Current State', {
+            'fields': ('is_active', 'current_source')
+        }),
+        ('Optimization Settings', {
+            'fields': ('can_defer', 'min_runtime')
+        }),
+    )
+
+
+@admin.register(SourceSwitchEvent)
+class SourceSwitchEventAdmin(admin.ModelAdmin):
+    list_display = ('load', 'from_source', 'to_source', 'triggered_by', 'success', 'timestamp')
+    list_filter = ('to_source', 'triggered_by', 'success', 'timestamp')
+    search_fields = ('load__name', 'reason')
+    ordering = ('-timestamp',)
+    date_hierarchy = 'timestamp'
+    readonly_fields = ('timestamp',)
