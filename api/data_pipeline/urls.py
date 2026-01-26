@@ -14,6 +14,7 @@ router.register(r'energy-sources', views.EnergySourceViewSet, basename='energy-s
 router.register(r'loads', views.LoadViewSet, basename='load')
 router.register(r'switch-events', views.SourceSwitchEventViewSet, basename='switch-event')
 router.register(r'optimization', views.EnergyOptimizationViewSet, basename='optimization')
+router.register(r'ai', views.AIPredictionViewSet, basename='ai-prediction')
 
 app_name = 'data_pipeline'
 

@@ -17,6 +17,7 @@ from .serializers import (
 )
 from .services.cache_manager import SensorBufferManager
 from .services.energy_optimizer import EnergySourceOptimizer
+from .services.ai_inference import AIInferenceService
 
 
 class SensorReadingViewSet(viewsets.ModelViewSet):
@@ -452,3 +453,186 @@ class EnergyOptimizationViewSet(viewsets.ViewSet):
             },
             'note': 'Module 1 (Hardware) should subscribe to MQTT commands and execute the physical switch'
         }, status=status.HTTP_201_CREATED)
+
+
+class AIPredictionViewSet(viewsets.ViewSet):
+    """
+    ViewSet for AI model predictions and inference.
+    
+    This is the main interface for Module 3 (AI) integration with the API.
+    Provides endpoints for:
+    - Energy demand forecasting
+    - Energy source recommendations
+    - Real-time decision making
+    """
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.ai_service = AIInferenceService()
+    
+    @action(detail=False, methods=['get'])
+    def status(self, request):
+        """
+        Check AI service status and availability.
+        
+        Returns information about loaded models and capabilities.
+        """
+        return Response({
+            'available': self.ai_service.is_available(),
+            'models_loaded': self.ai_service.models_loaded,
+            'capabilities': {
+                'demand_forecasting': self.ai_service.is_available(),
+                'source_optimization': self.ai_service.is_available(),
+                'decision_making': self.ai_service.is_available()
+            },
+            'timestamp': timezone.now().isoformat()
+        })
+    
+    @action(detail=False, methods=['get'])
+    def forecast(self, request):
+        """
+        Forecast energy demand for the next N hours.
+        
+        Query params:
+        - hours: Number of hours to forecast (default: 6, max: 24)
+        
+        Returns:
+        {
+            "timestamp": "2026-01-26T12:00:00Z",
+            "forecast_horizon": 6,
+            "predictions": [
+                {"hour": 1, "predicted_kwh": 1.5, "timestamp": "..."},
+                ...
+            ],
+            "available": true,
+            "model_type": "lstm"
+        }
+        """
+        hours = int(request.query_params.get('hours', 6))
+        hours = min(hours, 24)  # Cap at 24 hours
+        
+        result = self.ai_service.forecast_demand(hours_ahead=hours)
+        
+        # Record the prediction
+        if result.get('available') and 'predictions' in result:
+            try:
+                AIDecision.objects.create(
+                    decision_type='general',
+                    timestamp=timezone.now(),
+                    decision=result,
+                    confidence=0.85,
+                    applied=False,
+                    reasoning='Energy demand forecast'
+                )
+            except Exception as e:
+                print(f"Warning: Could not record forecast: {e}")
+        
+        return Response(result)
+    
+    @action(detail=False, methods=['post'])
+    def recommend_source(self, request):
+        """
+        Get energy source recommendation using AI optimization.
+        
+        Request body:
+        {
+            "load_name": "HVAC Living Room",
+            "load_priority": 75,
+            "load_power": 2000,
+            "current_conditions": {...}  // Optional
+        }
+        
+        Returns:
+        {
+            "timestamp": "2026-01-26T12:00:00Z",
+            "load_name": "HVAC Living Room",
+            "recommended_source": "solar",
+            "source_allocation": [["solar", 1.5], ["battery", 0.5]],
+            "metrics": {
+                "estimated_cost": 3.5,
+                "estimated_carbon": 250.0,
+                "battery_charge": 8.5
+            },
+            "reasoning": "Primary source: solar | High solar availability",
+            "confidence": 0.85,
+            "algorithm": "ml_optimizer",
+            "available": true
+        }
+        """
+        load_name = request.data.get('load_name')
+        load_priority = request.data.get('load_priority', 50)
+        load_power = request.data.get('load_power', 0)
+        current_conditions = request.data.get('current_conditions')
+        
+        if not load_name:
+            return Response(
+                {'error': 'load_name is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        result = self.ai_service.recommend_source(
+            load_name=load_name,
+            load_priority=load_priority,
+            load_power=load_power,
+            current_conditions=current_conditions
+        )
+        
+        # Record the recommendation
+        if result.get('available'):
+            try:
+                AIDecision.objects.create(
+                    decision_type='power_source',
+                    timestamp=timezone.now(),
+                    decision=result,
+                    confidence=result.get('confidence', 0.85),
+                    applied=False,
+                    reasoning=result.get('reasoning', '')
+                )
+            except Exception as e:
+                print(f"Warning: Could not record recommendation: {e}")
+        
+        return Response(result)
+    
+    @action(detail=False, methods=['post'])
+    def decide(self, request):
+        """
+        Make a comprehensive energy management decision.
+        
+        Combines demand forecasting and source optimization to provide
+        a complete decision with recommendations.
+        
+        Returns:
+        {
+            "timestamp": "2026-01-26T12:00:00Z",
+            "forecast": [
+                {"hour": 1, "predicted_kwh": 1.5, ...},
+                ...
+            ],
+            "current_decision": {
+                "predicted_demand_kwh": 1.5,
+                "source_allocation": [["solar", 1.0], ["battery", 0.5]],
+                "cost": 3.5,
+                "carbon": 250.0,
+                "battery_charge": 8.5
+            },
+            "recommendation": "Using solar power | Battery well charged",
+            "available": true
+        }
+        """
+        result = self.ai_service.make_decision()
+        
+        # Record the decision
+        if result.get('available'):
+            try:
+                AIDecision.objects.create(
+                    decision_type='general',
+                    timestamp=timezone.now(),
+                    decision=result,
+                    confidence=0.85,
+                    applied=False,
+                    reasoning=result.get('recommendation', '')
+                )
+            except Exception as e:
+                print(f"Warning: Could not record decision: {e}")
+        
+        return Response(result)
