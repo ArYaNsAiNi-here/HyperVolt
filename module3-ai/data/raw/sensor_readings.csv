@@ -1,0 +1,1 @@
+timestamp,sensor_id,ldr_raw,ldr_lux,is_daylight,room_lights_on,current_a,current_adc,voltage_v,power_w,energy_kwh,indoor_temperature_c,indoor_humidity_pct,outdoor_temperature_c,data_quality
