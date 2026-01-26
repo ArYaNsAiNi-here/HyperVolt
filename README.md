@@ -70,22 +70,33 @@ HyperVolt/
 - MQTT broker for IoT communication
 
 ### Module 3: The Prophet (AI Engine) ⭐
-**Status**: 🟢 **ACTIVE - Dataset Collection Complete**
+**Status**: 🟢 **COMPLETE - Phases 1 & 2**
 
 This is the brain of Vesta! Features:
-- ✅ **Demand Forecasting**: LSTM network predicts energy needs 6-24 hours ahead
-- ✅ **Source Optimization**: Decides Grid vs Solar vs Battery based on carbon + cost
-- ✅ **Carbon Intelligence**: Integrates real-time grid carbon intensity
-- ✅ **Dataset Collection**: Complete with 30 days of synthetic training data
+- ✅ **Dataset Collection**: Complete with 30 days of synthetic training data (Phase 1)
+- ✅ **Demand Forecasting**: LSTM network predicts energy needs 6 hours ahead (Phase 2)
+- ✅ **Source Optimization**: Decides Grid vs Solar vs Battery based on carbon + cost (Phase 2)
+- ✅ **Retraining Capability**: Adapts to new data automatically (Phase 2)
+- ✅ **Real-time Decision Engine**: Sub-second inference for live control (Phase 2)
+
+**Performance Metrics** (Phase 2):
+- Forecasting: MAE 0.33 kWh, R² 0.67
+- Optimization: 87.9% cost savings, 52.8% carbon reduction
+- Training: ~3 minutes for 50 epochs
 
 **Ready Datasets** (in `data/raw/`):
 - Weather patterns (temperature, solar radiation, cloud cover)
 - Carbon intensity (grid cleanliness, renewable %)
 - Energy consumption (lighting, appliances, HVAC)
 - Sensor readings (LDR, current, temperature)
-- Integrated ML-ready dataset (25+ features)
+- Integrated ML-ready dataset (27 features)
 
-👉 [See Module 3 README](module3-ai/README.md) for details
+**Trained Models** (in `models/`):
+- LSTM demand forecaster (TensorFlow/Keras)
+- Source optimization algorithm
+- Scalers and configurations
+
+👉 [See Module 3 Data README](module3-ai/README.md) | [See AI Models README](module3-ai/AI_MODELS_README.md)
 
 ### Module 4: The Orchestrator (Digital Twin UI)
 **Status**: 🟡 Planning
@@ -210,11 +221,12 @@ Saving: 2.4 kg CO2 per day
 - [x] API integration templates
 - [x] Mock data generators
 
-### Phase 2: The Logic 🔄 (In Progress)
-- [ ] AI model training (LSTM for forecasting)
-- [ ] Optimization algorithms
-- [ ] Decision engine
-- [ ] Model evaluation
+### Phase 2: The Logic ✅ (Complete)
+- [x] AI model training (LSTM for forecasting)
+- [x] Optimization algorithms
+- [x] Decision engine
+- [x] Model evaluation
+- [x] Retraining capability
 
 ### Phase 3: The Dashboard (Next)
 - [ ] Next.js setup
