@@ -1,0 +1,21 @@
+# Handle CSV files
+*.csv text eol=lf
+
+# Handle image files
+*.png binary
+*.jpg binary
+*.jpeg binary
+
+# Python files
+*.py text eol=lf
+*.ipynb text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# Configuration files
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+.env* text eol=lf

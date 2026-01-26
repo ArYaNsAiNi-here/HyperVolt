@@ -176,7 +176,7 @@ cython_debug/
 #.idea/
 
 # Abstra
-# Abstra is an AI-powered process automation framework.
+# Abstra is an ai-powered process automation framework.
 # Ignore directories containing user credentials, local state, and settings.
 # Learn more at https://abstra.io/docs
 .abstra/
@@ -195,8 +195,8 @@ cython_debug/
 .pypirc
 
 # Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
+#  Cursor is an ai-powered code editor. `.cursorignore` specifies files/directories to
+#  exclude from ai features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
@@ -205,3 +205,14 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Vesta Project Specific
+# We DO want to track example data, but not sensitive files
+.env
+*.key
+*.pem
+
+# Large generated datasets (optional - uncomment if datasets are too large)
+# data/raw/*.csv
+# models/*.h5
+# models/*.pkl
