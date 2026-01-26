@@ -19,7 +19,7 @@ from generate_sensor_data import SensorDataGenerator
 
 class MasterDataCollector:
     """
-    Orchestrates all data collection and generation for the AI model
+    Orchestrates all data collection and generation for the ai model
     """
     
     def __init__(self, days: int = 30):
@@ -29,12 +29,12 @@ class MasterDataCollector:
     
     def collect_all_datasets(self):
         """
-        Collect all required datasets for training the AI model
+        Collect all required datasets for training the ai model
         """
         print("=" * 70)
         print("VESTA ENERGY ORCHESTRATOR - DATA COLLECTION")
         print("=" * 70)
-        print(f"Collecting {self.days} days of data for AI training...\n")
+        print(f"Collecting {self.days} days of data for ai training...\n")
         
         datasets = {}
         
@@ -118,7 +118,7 @@ class MasterDataCollector:
     def create_integrated_dataset(self, datasets: dict) -> pd.DataFrame:
         """
         Combine all datasets into a single integrated dataset
-        This is the main dataset for training the AI model
+        This is the main dataset for training the ai model
         """
         # Start with energy data (hourly)
         df = datasets['energy'].copy()
@@ -211,12 +211,12 @@ class MasterDataCollector:
         print(f"  Avg Renewable %:       {integrated_df['renewable_percentage'].mean():.1f}%")
         
         print("\n" + "=" * 70)
-        print("✓ ALL DATASETS READY FOR MODULE 3 (AI Training)")
+        print("✓ ALL DATASETS READY FOR MODULE 3 (ai Training)")
         print("=" * 70)
         print("\nNext Steps:")
         print("  1. Review datasets in 'data/raw/' directory")
         print("  2. Run data preprocessing (optional)")
-        print("  3. Start training AI models (Module 3)")
+        print("  3. Start training ai models (Module 3)")
         print("  4. Use 'integrated_dataset.csv' for ML model training")
         print("\n")
 

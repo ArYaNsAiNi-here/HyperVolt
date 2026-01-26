@@ -1,6 +1,6 @@
 """
 Energy Consumption Pattern Generator for Vesta Energy Orchestrator
-Generates realistic energy consumption patterns for training the AI model
+Generates realistic energy consumption patterns for training the ai model
 """
 
 import os

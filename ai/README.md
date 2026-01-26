@@ -163,7 +163,7 @@ This is the brain of Vesta! Features:
 ### AI-Powered Optimization
 
 ```python
-# The AI decides:
+# The ai decides:
 if carbon_intensity > threshold and battery_available:
     switch_to_battery()
 elif solar_available and time_is_day:
