@@ -78,10 +78,12 @@ This is the brain of Vesta! Features:
 - ✅ **Source Optimization**: Decides Grid vs Solar vs Battery based on carbon + cost (Phase 2)
 - ✅ **Retraining Capability**: Adapts to new data automatically (Phase 2)
 - ✅ **Real-time Decision Engine**: Sub-second inference for live control (Phase 2)
+- ✅ **Solar Dust Prediction**: ML model detects dust on solar panels using LDR + power output (Phase 2) **NEW!**
 
 **Performance Metrics** (Phase 2):
 - Forecasting: MAE 0.33 kWh, R² 0.67
 - Optimization: 87.9% cost savings, 52.8% carbon reduction
+- Solar Dust: MAE 1.86%, R² 0.97 **NEW!**
 - Training: ~3 minutes for 50 epochs
 
 **Ready Datasets** (in `data/raw/`):
@@ -89,14 +91,16 @@ This is the brain of Vesta! Features:
 - Carbon intensity (grid cleanliness, renewable %)
 - Energy consumption (lighting, appliances, HVAC)
 - Sensor readings (LDR, current, temperature)
+- Solar panel dust data (LDR, power output, efficiency) **NEW!**
 - Integrated ML-ready dataset (27 features)
 
 **Trained Models** (in `models/`):
 - LSTM demand forecaster (TensorFlow/Keras)
 - Source optimization algorithm
+- Solar dust prediction (Random Forest) **NEW!**
 - Scalers and configurations
 
-👉 [See Module 3 Data README](module3-ai/README.md) | [See AI Models README](module3-ai/AI_MODELS_README.md)
+👉 [See Module 3 Data README](module3-ai/README.md) | [See AI Models README](module3-ai/AI_MODELS_README.md) | [See Solar Dust README](module3-ai/SOLAR_DUST_README.md) **NEW!**
 
 ### Module 4: The Orchestrator (Digital Twin UI)
 **Status**: 🟡 Planning
