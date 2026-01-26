@@ -1,0 +1,32 @@
+# Core Django
+Django>=5.0,<5.1
+django-environ>=0.11.0
+
+# REST Framework
+djangorestframework>=3.14.0
+django-cors-headers>=4.3.0
+
+# Real-time Communication
+channels>=4.0.0
+channels-redis>=4.2.0
+daphne>=4.1.0
+
+# MQTT
+paho-mqtt>=2.0.0
+
+# Task Scheduling
+django-q2>=1.6.0
+
+# Database
+psycopg2-binary>=2.9.9
+
+# Caching
+redis>=5.0.0
+django-redis>=5.4.0
+
+# External API
+requests>=2.31.0
+python-dateutil>=2.8.0
+
+# Utilities
+pytz>=2024.1
