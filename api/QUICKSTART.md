@@ -189,8 +189,8 @@ pip install -r requirements.txt
 
 ## 📚 Documentation
 
-- **Full Module 2 docs**: [MODULE2_README.md](./MODULE2_README.md)
-- **Project overview**: [README.md](./README.md)
+- **Full Module 2 docs**: [MODULE2_README.md](MODULE2_README.md)
+- **Project overview**: [README.md](../README.md)
 - **API Reference**: See MODULE2_README.md
 
 ## ✨ You're Ready!
