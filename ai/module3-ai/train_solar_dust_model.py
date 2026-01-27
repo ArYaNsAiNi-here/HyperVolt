@@ -62,6 +62,12 @@ class SolarDustPredictor:
         Returns:
             X (features), y (target - dust percentage)
         """
+        # Calculate volatility feature for shadow vs dust differentiation
+        # Dust: gradual monotonic decrease in efficiency
+        # Shadow: sudden drops and recoveries (high volatility)
+        df['power_volatility'] = df['actual_power_kw'].rolling(window=6, min_periods=1).std()
+        df['efficiency_volatility'] = df['efficiency_ratio'].rolling(window=6, min_periods=1).std()
+        
         # Define features for prediction
         self.feature_columns = [
             'solar_irradiance',
@@ -70,6 +76,8 @@ class SolarDustPredictor:
             'expected_power_kw',
             'actual_power_kw',
             'efficiency_ratio',
+            'power_volatility',
+            'efficiency_volatility',
             'days_since_cleaning',
             'hour'
         ]
@@ -207,6 +215,7 @@ class SolarDustPredictor:
     def predict(self, current_data: pd.DataFrame) -> Dict:
         """
         Predict dust accumulation for current conditions
+        Differentiates between temporary shadows and permanent dust
         
         Args:
             current_data: DataFrame with current sensor readings
@@ -217,35 +226,62 @@ class SolarDustPredictor:
         if self.model is None:
             raise ValueError("Model not trained or loaded. Train or load model first.")
         
+        # Create a copy to avoid modifying the input DataFrame
+        data = current_data.copy()
+        
+        # Calculate volatility if not present
+        if 'power_volatility' not in data.columns:
+            data['power_volatility'] = 0.0
+        if 'efficiency_volatility' not in data.columns:
+            data['efficiency_volatility'] = 0.0
+        
         # Prepare features
-        X = current_data[self.feature_columns].values
+        X = data[self.feature_columns].values
         X = self.scaler.transform(X)
         
         # Predict
         dust_percentage = self.model.predict(X)[0]
         
-        # Generate recommendations
-        needs_cleaning = dust_percentage > 40
-        urgency = 'High' if dust_percentage > 60 else 'Medium' if dust_percentage > 40 else 'Low'
+        # Differentiate between shadow and dust
+        # High volatility = likely shadow/cloud
+        # Low volatility + low efficiency = likely dust
+        volatility = data['efficiency_volatility'].values[0] if 'efficiency_volatility' in data.columns else 0
         
-        # Calculate potential savings from cleaning
-        efficiency_loss = dust_percentage * 0.007
-        if 'expected_power_kw' in current_data.columns:
-            expected_power = current_data['expected_power_kw'].values[0]
-            potential_gain_kw = expected_power * efficiency_loss
-            potential_revenue_gain = potential_gain_kw * 6  # ₹6/kWh
+        is_shadow = volatility > 0.05  # High volatility indicates temporary shadow
+        issue_type = "Shadow/Cloud" if is_shadow else "Dust"
+        
+        # Generate recommendations
+        if is_shadow:
+            needs_cleaning = False
+            urgency = 'None'
+            recommendation = f"Low efficiency detected but high volatility ({volatility:.3f}). Likely temporary shadow/cloud, not dust. No cleaning needed."
         else:
-            potential_gain_kw = 0
-            potential_revenue_gain = 0
+            needs_cleaning = dust_percentage > 40
+            urgency = 'High' if dust_percentage > 60 else 'Medium' if dust_percentage > 40 else 'Low'
+            
+            # Calculate potential savings from cleaning
+            efficiency_loss = dust_percentage * 0.007
+            if 'expected_power_kw' in data.columns:
+                expected_power = data['expected_power_kw'].values[0]
+                potential_gain_kw = expected_power * efficiency_loss
+                potential_revenue_gain = potential_gain_kw * 6  # ₹6/kWh
+            else:
+                potential_gain_kw = 0
+                potential_revenue_gain = 0
+            
+            recommendation = self._generate_recommendation(dust_percentage, urgency)
         
         return {
             'dust_percentage': float(dust_percentage),
+            'issue_type': issue_type,
+            'is_shadow': bool(is_shadow),
+            'volatility': float(volatility),
             'needs_cleaning': bool(needs_cleaning),
             'urgency': urgency,
-            'efficiency_loss_percent': float(efficiency_loss * 100),
-            'potential_power_gain_kw': float(potential_gain_kw),
-            'potential_revenue_gain_per_hour': float(potential_revenue_gain),
-            'recommendation': self._generate_recommendation(dust_percentage, urgency)
+            'efficiency_loss_percent': float(dust_percentage * 0.007 * 100) if not is_shadow else 0.0,
+            'potential_power_gain_kw': float(potential_gain_kw) if not is_shadow else 0.0,
+            'potential_revenue_gain_per_hour': float(potential_revenue_gain) if not is_shadow else 0.0,
+            'recommendation': recommendation
         }
     
     def _generate_recommendation(self, dust_percentage: float, urgency: str) -> str:

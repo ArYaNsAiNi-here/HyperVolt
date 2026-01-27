@@ -18,6 +18,124 @@ from train_demand_model import EnergyDemandForecaster
 from optimize_sources import SourceOptimizer, EnergySource
 
 
+class LoadType:
+    """Classification of appliance loads"""
+    CRITICAL = "critical"  # Cannot be deferred (lights, router, refrigerator)
+    DEFERRABLE = "deferrable"  # Can be deferred (washing machine, EV charger, AC)
+
+
+class LoadManager:
+    """
+    Manages load shedding and demand response
+    Classifies loads and makes deferral decisions based on carbon intensity
+    """
+    
+    # Configuration constants
+    DEFAULT_CARBON_THRESHOLD = 700  # gCO2eq/kWh
+    CLEAN_CARBON_BASELINE = 400  # gCO2eq/kWh - baseline for clean energy
+    NORMAL_GRID_PRICE = 5.0  # ₹/kWh - baseline grid price
+    
+    def __init__(self, carbon_threshold: float = DEFAULT_CARBON_THRESHOLD):
+        """
+        Initialize load manager
+        
+        Args:
+            carbon_threshold: Carbon intensity threshold (gCO2eq/kWh) above which to defer loads
+        """
+        self.carbon_threshold = carbon_threshold
+        
+        # Define load classifications with typical power consumption
+        self.loads = {
+            'lights': {'type': LoadType.CRITICAL, 'power_kw': 0.2},
+            'router': {'type': LoadType.CRITICAL, 'power_kw': 0.05},
+            'refrigerator': {'type': LoadType.CRITICAL, 'power_kw': 0.15},
+            'washing_machine': {'type': LoadType.DEFERRABLE, 'power_kw': 1.5},
+            'ev_charger': {'type': LoadType.DEFERRABLE, 'power_kw': 3.0},
+            'air_conditioner': {'type': LoadType.DEFERRABLE, 'power_kw': 2.0},
+            'dishwasher': {'type': LoadType.DEFERRABLE, 'power_kw': 1.2}
+        }
+    
+    def should_defer_load(self, load_name: str, carbon_intensity: float, grid_price: float) -> Dict:
+        """
+        Determine if a load should be deferred
+        
+        Args:
+            load_name: Name of the appliance/load
+            carbon_intensity: Current grid carbon intensity (gCO2eq/kWh)
+            grid_price: Current grid price (₹/kWh)
+            
+        Returns:
+            Dictionary with decision and reasoning
+        """
+        if load_name not in self.loads:
+            return {'defer': False, 'reason': 'Unknown load'}
+        
+        load = self.loads[load_name]
+        
+        # Critical loads are never deferred
+        if load['type'] == LoadType.CRITICAL:
+            return {
+                'defer': False,
+                'reason': 'Critical load - cannot defer',
+                'load_type': LoadType.CRITICAL
+            }
+        
+        # Deferrable loads: check carbon intensity
+        if carbon_intensity > self.carbon_threshold:
+            return {
+                'defer': True,
+                'reason': f'High carbon intensity ({carbon_intensity:.0f} gCO2eq/kWh) - defer until cleaner',
+                'load_type': LoadType.DEFERRABLE,
+                'carbon_savings': load['power_kw'] * (carbon_intensity - self.CLEAN_CARBON_BASELINE)
+            }
+        
+        # Also defer if grid price is very high
+        if grid_price > 8.0:
+            return {
+                'defer': True,
+                'reason': f'High grid price (₹{grid_price:.2f}/kWh) - defer until cheaper',
+                'load_type': LoadType.DEFERRABLE,
+                'cost_savings': load['power_kw'] * (grid_price - self.NORMAL_GRID_PRICE)
+            }
+        
+        return {
+            'defer': False,
+            'reason': 'Good conditions - proceed with load',
+            'load_type': LoadType.DEFERRABLE
+        }
+    
+    def get_load_shedding_recommendation(self, carbon_intensity: float, grid_price: float) -> Dict:
+        """
+        Get recommendations for all deferrable loads
+        
+        Args:
+            carbon_intensity: Current grid carbon intensity
+            grid_price: Current grid price
+            
+        Returns:
+            Dictionary with recommendations for each load
+        """
+        recommendations = {}
+        total_deferred_power = 0
+        total_carbon_saved = 0
+        
+        for load_name in self.loads:
+            decision = self.should_defer_load(load_name, carbon_intensity, grid_price)
+            recommendations[load_name] = decision
+            
+            if decision['defer']:
+                total_deferred_power += self.loads[load_name]['power_kw']
+                if 'carbon_savings' in decision:
+                    total_carbon_saved += decision['carbon_savings']
+        
+        return {
+            'recommendations': recommendations,
+            'total_deferred_power_kw': total_deferred_power,
+            'total_carbon_saved_g': total_carbon_saved,
+            'summary': f"Defer {total_deferred_power:.1f} kW to save {total_carbon_saved:.0f}g CO2" if total_deferred_power > 0 else "All loads can proceed"
+        }
+
+
 class VestaDecisionEngine:
     """
     The Brain of Vesta Energy Orchestrator
@@ -34,6 +152,7 @@ class VestaDecisionEngine:
             battery_capacity=10.0,
             battery_max_discharge=2.0
         )
+        self.load_manager = LoadManager(carbon_threshold=700)
         self.decision_log = []
         
     def load_models(self) -> bool:
@@ -107,9 +226,50 @@ class VestaDecisionEngine:
         # Step 2: For the next hour, optimize source selection
         current_power_needed = forecast[0]  # Next hour's predicted demand
         
+        # Step 3: Check for Grid Arbitrage opportunity
+        grid_price = current_conditions.get('grid_price', 6.0)
+        battery_level = self.optimizer.battery_current_charge
+        battery_pct = (battery_level / self.optimizer.battery_capacity) * 100
+        
+        # Grid Arbitrage thresholds
+        high_price_threshold = 8.0  # ₹/kWh - sell to grid
+        low_price_threshold = 4.0   # ₹/kWh - buy from grid to charge battery
+        
+        grid_action = None
+        grid_revenue = 0.0
+        
+        # Sell to grid if price is high and battery is well charged
+        if grid_price > high_price_threshold and battery_pct > 80:
+            # Calculate how much we can sell
+            sellable_power = min(
+                self.optimizer.battery_max_discharge,
+                battery_level - (self.optimizer.battery_capacity * 0.5)  # Keep at least 50%
+            )
+            if sellable_power > 0:
+                grid_action = "DISCHARGE_TO_GRID"
+                grid_revenue = sellable_power * grid_price
+                self.optimizer.battery_current_charge -= sellable_power
+        
+        # Buy from grid to charge battery if price is very low
+        elif grid_price < low_price_threshold and battery_pct < 60:
+            charge_amount = min(
+                2.0,  # Max 2 kW charge rate
+                self.optimizer.battery_capacity - battery_level
+            )
+            if charge_amount > 0:
+                grid_action = "CHARGE_FROM_GRID"
+                grid_revenue = -charge_amount * grid_price  # Negative = cost
+                self.optimizer.battery_current_charge += charge_amount
+        
         allocation, metrics = self.optimizer.optimize_source(
             current_power_needed,
             current_conditions
+        )
+        
+        # Step 4: Get load shedding recommendations
+        load_recommendations = self.load_manager.get_load_shedding_recommendation(
+            current_conditions.get('carbon_intensity', 500),
+            grid_price
         )
         
         # Prepare decision
@@ -121,9 +281,12 @@ class VestaDecisionEngine:
                 'source_allocation': [(s.value, float(p)) for s, p in allocation],
                 'cost': float(metrics['cost']),
                 'carbon': float(metrics['carbon']),
-                'battery_charge': float(metrics['battery_charge'])
+                'battery_charge': float(metrics['battery_charge']),
+                'grid_action': grid_action,
+                'grid_revenue': float(grid_revenue)
             },
-            'recommendation': self._generate_recommendation(forecast, allocation, metrics)
+            'load_shedding': load_recommendations,
+            'recommendation': self._generate_recommendation(forecast, allocation, metrics, grid_action, grid_revenue, load_recommendations)
         }
         
         # Log decision
@@ -133,12 +296,25 @@ class VestaDecisionEngine:
     
     def _generate_recommendation(self, forecast: np.ndarray, 
                                  allocation: List[Tuple[EnergySource, float]],
-                                 metrics: Dict) -> str:
+                                 metrics: Dict,
+                                 grid_action: str = None,
+                                 grid_revenue: float = 0.0,
+                                 load_recommendations: Dict = None) -> str:
         """Generate human-readable recommendation"""
         sources = [s.value for s, _ in allocation]
         
         # Build recommendation text
         rec = []
+        
+        # Grid Arbitrage actions
+        if grid_action == "DISCHARGE_TO_GRID":
+            rec.append(f"💰 SELLING to grid! Revenue: ₹{grid_revenue:.2f}")
+        elif grid_action == "CHARGE_FROM_GRID":
+            rec.append(f"🔌 BUYING from grid (low price). Cost: ₹{abs(grid_revenue):.2f}")
+        
+        # Load shedding recommendations
+        if load_recommendations and load_recommendations['total_deferred_power_kw'] > 0:
+            rec.append(f"⚡ Load Shedding: {load_recommendations['summary']}")
         
         if EnergySource.SOLAR in [s for s, _ in allocation]:
             rec.append("Using solar power (cleanest option)")
@@ -185,7 +361,7 @@ class VestaDecisionEngine:
             # Current conditions
             current = df.iloc[i]
             conditions = {
-                'solar_radiation': current['solar_radiation_proxy'],
+                'shortwave_radiation': current.get('shortwave_radiation', current.get('solar_radiation_proxy', 0) * 800),
                 'cloud_cover': current['cloud_cover'],
                 'hour': current['hour'],
                 'carbon_intensity': current['carbon_intensity'],

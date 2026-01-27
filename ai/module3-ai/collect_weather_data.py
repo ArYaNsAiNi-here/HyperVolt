@@ -1,11 +1,12 @@
 """
 Weather Data Collector for Vesta Energy Orchestrator
-Gathers historical and real-time weather data from OpenWeatherMap API
+Gathers historical and real-time weather data from Open-Meteo API
 """
 
 import os
 import json
 import pandas as pd
+import numpy as np
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -16,94 +17,132 @@ load_dotenv()
 
 class WeatherDataCollector:
     """
-    Collects weather data from OpenWeatherMap API
-    Features collected: temperature, humidity, cloud cover, wind speed, solar radiation proxy
+    Collects weather data from Open-Meteo API
+    Features collected: temperature, humidity, cloud cover, wind speed, 
+                       shortwave/direct/diffuse radiation
     """
     
-    def __init__(self):
-        self.api_key = os.getenv('OPENWEATHER_API_KEY')
+    # API configuration constants
+    DEFAULT_MINUTELY_PARAMS = [
+        'temperature_2m',
+        'relative_humidity_2m',
+        'shortwave_radiation',
+        'direct_radiation',
+        'diffuse_radiation',
+        'wind_speed_10m'
+    ]
+    
+    DEFAULT_HOURLY_PARAMS = [
+        'temperature_2m',
+        'relative_humidity_2m',
+        'cloud_cover',
+        'weather_code',
+        'wind_speed_10m',
+        'shortwave_radiation',
+        'direct_radiation',
+        'diffuse_radiation'
+    ]
+    
+    def __init__(self, minutely_params: List[str] = None, hourly_params: List[str] = None):
+        # Open-Meteo doesn't require an API key for free tier (10,000 calls/day)
         self.lat = float(os.getenv('LATITUDE', 12.9716))
         self.lon = float(os.getenv('LONGITUDE', 77.5946))
-        self.base_url = "https://api.openweathermap.org/data/2.5"
+        self.base_url = "https://api.open-meteo.com/v1/forecast"
+        self.use_mock = False
         
-        if not self.api_key or self.api_key == 'your_openweather_api_key_here':
-            print("WARNING: OpenWeatherMap API key not set. Using mock data.")
-            self.use_mock = True
-        else:
-            self.use_mock = False
+        # Use default params if not provided
+        self.minutely_params = minutely_params or self.DEFAULT_MINUTELY_PARAMS
+        self.hourly_params = hourly_params or self.DEFAULT_HOURLY_PARAMS
     
     def get_current_weather(self) -> Dict:
-        """Get current weather data"""
+        """Get current weather data using Open-Meteo's high-resolution 15-minute data"""
         if self.use_mock:
             return self._generate_mock_current_weather()
         
-        url = f"{self.base_url}/weather"
         params = {
-            'lat': self.lat,
-            'lon': self.lon,
-            'appid': self.api_key,
-            'units': 'metric'
+            'latitude': self.lat,
+            'longitude': self.lon,
+            # High-resolution 15-minute data for immediate optimization
+            'minutely_15': ','.join(self.minutely_params),
+            # Daily data for sunrise/sunset
+            'daily': 'sunrise,sunset',
+            'timezone': 'auto',
+            'forecast_days': 1
         }
         
         try:
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(self.base_url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
+            
+            # Extract the first (current) 15-minute data point
+            minutely = data.get('minutely_15', {})
+            daily = data.get('daily', {})
+            
+            # Get current index (first value is most recent)
+            idx = 0
             
             return {
                 'timestamp': datetime.now().isoformat(),
-                'temperature': data['main']['temp'],
-                'humidity': data['main']['humidity'],
-                'cloud_cover': data['clouds']['all'],
-                'wind_speed': data['wind']['speed'],
-                'weather_condition': data['weather'][0]['main'],
-                'sunrise': datetime.fromtimestamp(data['sys']['sunrise']).isoformat(),
-                'sunset': datetime.fromtimestamp(data['sys']['sunset']).isoformat()
+                'temperature': minutely['temperature_2m'][idx] if 'temperature_2m' in minutely else 25.0,
+                'humidity': minutely['relative_humidity_2m'][idx] if 'relative_humidity_2m' in minutely else 65.0,
+                'shortwave_radiation': minutely['shortwave_radiation'][idx] if 'shortwave_radiation' in minutely else 0.0,
+                'direct_radiation': minutely['direct_radiation'][idx] if 'direct_radiation' in minutely else 0.0,
+                'diffuse_radiation': minutely['diffuse_radiation'][idx] if 'diffuse_radiation' in minutely else 0.0,
+                'wind_speed': minutely['wind_speed_10m'][idx] if 'wind_speed_10m' in minutely else 2.0,
+                'sunrise': daily['sunrise'][0] if 'sunrise' in daily else datetime.now().replace(hour=6, minute=0).isoformat(),
+                'sunset': daily['sunset'][0] if 'sunset' in daily else datetime.now().replace(hour=18, minute=30).isoformat()
             }
         except Exception as e:
-            print(f"Error fetching current weather: {e}")
+            print(f"Error fetching current weather from Open-Meteo: {e}")
             return self._generate_mock_current_weather()
     
-    def get_forecast(self, days: int = 5) -> List[Dict]:
-        """Get weather forecast for next N days"""
+    def get_forecast(self, days: int = 3) -> List[Dict]:
+        """Get weather forecast for next N days using Open-Meteo"""
         if self.use_mock:
             return self._generate_mock_forecast(days)
         
-        url = f"{self.base_url}/forecast"
         params = {
-            'lat': self.lat,
-            'lon': self.lon,
-            'appid': self.api_key,
-            'units': 'metric',
-            'cnt': days * 8  # 8 readings per day (3-hour intervals)
+            'latitude': self.lat,
+            'longitude': self.lon,
+            # Hourly data for longer-term planning
+            'hourly': ','.join(self.hourly_params),
+            'timezone': 'auto',
+            'forecast_days': days
         }
         
         try:
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(self.base_url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
             
+            hourly = data.get('hourly', {})
+            times = hourly.get('time', [])
+            
             forecast_data = []
-            for item in data['list']:
+            for i in range(len(times)):
                 forecast_data.append({
-                    'timestamp': item['dt_txt'],
-                    'temperature': item['main']['temp'],
-                    'humidity': item['main']['humidity'],
-                    'cloud_cover': item['clouds']['all'],
-                    'wind_speed': item['wind']['speed'],
-                    'weather_condition': item['weather'][0]['main']
+                    'timestamp': times[i],
+                    'temperature': hourly['temperature_2m'][i] if 'temperature_2m' in hourly else 25.0,
+                    'humidity': hourly['relative_humidity_2m'][i] if 'relative_humidity_2m' in hourly else 65.0,
+                    'cloud_cover': hourly['cloud_cover'][i] if 'cloud_cover' in hourly else 50.0,
+                    'wind_speed': hourly['wind_speed_10m'][i] if 'wind_speed_10m' in hourly else 2.0,
+                    'weather_code': hourly['weather_code'][i] if 'weather_code' in hourly else 0,
+                    'shortwave_radiation': hourly['shortwave_radiation'][i] if 'shortwave_radiation' in hourly else 0.0,
+                    'direct_radiation': hourly['direct_radiation'][i] if 'direct_radiation' in hourly else 0.0,
+                    'diffuse_radiation': hourly['diffuse_radiation'][i] if 'diffuse_radiation' in hourly else 0.0
                 })
             
             return forecast_data
         except Exception as e:
-            print(f"Error fetching forecast: {e}")
+            print(f"Error fetching forecast from Open-Meteo: {e}")
             return self._generate_mock_forecast(days)
     
     def collect_historical_data(self, days: int = 30) -> pd.DataFrame:
         """
         Collect historical weather data
-        Note: OpenWeatherMap free tier doesn't provide historical data
-        This generates synthetic historical data based on patterns
+        Note: Open-Meteo provides historical data, but for simplicity we generate
+        synthetic data with realistic solar radiation patterns
         """
         print(f"Generating synthetic historical weather data for {days} days...")
         
@@ -137,9 +176,23 @@ class WeatherDataCollector:
         wind_speed = 2 + 3 * (hours / 24) + np.random.normal(0, 1, len(dates))
         wind_speed = np.clip(wind_speed, 0, 15)
         
-        # Solar radiation proxy (inverse of cloud cover during daylight)
+        # Solar radiation using realistic shortwave radiation (W/m²)
+        # Maximum solar radiation at solar noon
         is_daylight = (hours >= 6) & (hours <= 18)
-        solar_proxy = is_daylight * (100 - cloud_cover) / 100
+        solar_elevation = np.sin(2 * np.pi * (hours - 6) / 12) * is_daylight
+        
+        # Shortwave radiation (Global Horizontal Irradiance)
+        max_ghi = 1000  # W/m² at peak
+        shortwave_radiation = max_ghi * solar_elevation * (100 - cloud_cover) / 100
+        shortwave_radiation = np.clip(shortwave_radiation, 0, 1000)
+        
+        # Direct radiation (beam radiation)
+        direct_radiation = shortwave_radiation * 0.7 * (100 - cloud_cover) / 100
+        direct_radiation = np.clip(direct_radiation, 0, 800)
+        
+        # Diffuse radiation (scattered radiation)
+        diffuse_radiation = shortwave_radiation - direct_radiation
+        diffuse_radiation = np.clip(diffuse_radiation, 0, 400)
         
         df = pd.DataFrame({
             'timestamp': dates,
@@ -147,7 +200,9 @@ class WeatherDataCollector:
             'humidity': humidity,
             'cloud_cover': cloud_cover,
             'wind_speed': wind_speed,
-            'solar_radiation_proxy': solar_proxy,
+            'shortwave_radiation': shortwave_radiation,
+            'direct_radiation': direct_radiation,
+            'diffuse_radiation': diffuse_radiation,
             'is_daylight': is_daylight
         })
         
@@ -159,13 +214,22 @@ class WeatherDataCollector:
         now = datetime.now()
         hour = now.hour
         
+        # Calculate solar radiation based on time of day
+        is_daylight = 6 <= hour <= 18
+        if is_daylight:
+            solar_elevation = abs(np.sin(2 * np.pi * (hour - 6) / 12))
+            shortwave_rad = 800 * solar_elevation
+        else:
+            shortwave_rad = 0.0
+        
         return {
             'timestamp': now.isoformat(),
             'temperature': 25 + 8 * abs((hour - 12) / 12) + random.uniform(-2, 2),
             'humidity': 65 + random.uniform(-10, 10),
-            'cloud_cover': random.uniform(20, 80),
+            'shortwave_radiation': shortwave_rad,
+            'direct_radiation': shortwave_rad * 0.7,
+            'diffuse_radiation': shortwave_rad * 0.3,
             'wind_speed': 2 + random.uniform(0, 3),
-            'weather_condition': random.choice(['Clear', 'Clouds', 'Rain']),
             'sunrise': now.replace(hour=6, minute=0).isoformat(),
             'sunset': now.replace(hour=18, minute=30).isoformat()
         }
@@ -173,20 +237,34 @@ class WeatherDataCollector:
     def _generate_mock_forecast(self, days: int) -> List[Dict]:
         """Generate mock forecast data"""
         import random
+        import numpy as np
         forecast = []
         base_time = datetime.now()
         
-        for i in range(days * 8):  # 3-hour intervals
-            timestamp = base_time + timedelta(hours=i * 3)
+        for i in range(days * 24):  # Hourly intervals
+            timestamp = base_time + timedelta(hours=i)
             hour = timestamp.hour
+            
+            # Calculate solar radiation
+            is_daylight = 6 <= hour <= 18
+            if is_daylight:
+                solar_elevation = abs(np.sin(2 * np.pi * (hour - 6) / 12))
+                shortwave_rad = (800 + random.uniform(-100, 100)) * solar_elevation
+            else:
+                shortwave_rad = 0.0
+            
+            cloud = random.uniform(20, 80)
             
             forecast.append({
                 'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                 'temperature': 25 + 8 * abs((hour - 12) / 12) + random.uniform(-2, 2),
                 'humidity': 65 + random.uniform(-10, 10),
-                'cloud_cover': random.uniform(20, 80),
+                'cloud_cover': cloud,
                 'wind_speed': 2 + random.uniform(0, 3),
-                'weather_condition': random.choice(['Clear', 'Clouds', 'Rain'])
+                'weather_code': random.choice([0, 1, 2, 3]),  # WMO codes
+                'shortwave_radiation': shortwave_rad * (100 - cloud) / 100,
+                'direct_radiation': shortwave_rad * 0.7 * (100 - cloud) / 100,
+                'diffuse_radiation': shortwave_rad * 0.3
             })
         
         return forecast
@@ -210,8 +288,8 @@ def main():
     print(json.dumps(current, indent=2))
     
     # Collect forecast
-    print("\nCollecting 5-day forecast...")
-    forecast = collector.get_forecast(days=5)
+    print("\nCollecting 3-day forecast...")
+    forecast = collector.get_forecast(days=3)
     forecast_df = pd.DataFrame(forecast)
     collector.save_to_csv(forecast_df, 'weather_forecast.csv')
     
