@@ -35,6 +35,7 @@ export default function Dashboard() {
   const [activeSource, setActiveSource] = useState<'solar' | 'battery' | 'grid'>('grid')
   const [lightIntensity, setLightIntensity] = useState(50)
   const [brightnessThreshold, setBrightnessThreshold] = useState(50)
+  const [weatherCondition, setWeatherCondition] = useState('sunny')
   const [strategyLogs, setStrategyLogs] = useState<StrategyLogEntry[]>([])
   const [forecastData, setForecastData] = useState<ForecastPrediction[]>([])
   const [stats, setStats] = useState({
@@ -159,6 +160,25 @@ export default function Dashboard() {
           details: carbonData.value > 400 ? 'High carbon intensity detected' : 'Clean energy available',
         })
 
+        // Get current weather
+        try {
+          const weatherData = await apiService.getCurrentWeather()
+          if (weatherData.metadata && weatherData.metadata.weather) {
+            const weatherDesc = weatherData.metadata.weather.description || 'sunny'
+            setWeatherCondition(weatherDesc.toLowerCase())
+            
+            addLog({
+              id: (Date.now() + 3).toString(),
+              timestamp: new Date().toISOString(),
+              type: 'info',
+              message: `Current weather: ${weatherDesc}`,
+            })
+          }
+        } catch (error) {
+          console.log('Weather data not available, using default sunny conditions')
+          setWeatherCondition('sunny')
+        }
+
       } catch (error) {
         console.error('Failed to fetch initial data:', error)
         addLog({
@@ -266,6 +286,8 @@ export default function Dashboard() {
                 <DigitalTwin 
                   lightIntensity={lightIntensity} 
                   activeSource={activeSource}
+                  brightnessThreshold={brightnessThreshold}
+                  weatherCondition={weatherCondition}
                   className="w-full h-full"
                 />
               </div>

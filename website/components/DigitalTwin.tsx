@@ -1,19 +1,237 @@
 'use client'
 
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, Suspense } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 
 interface DigitalTwinProps {
   lightIntensity: number // 0-100 from LDR sensor
   activeSource: 'solar' | 'battery' | 'grid'
+  brightnessThreshold: number // 0-100 user preference
+  weatherCondition?: string // 'sunny', 'cloudy', 'rainy', etc.
   className?: string
 }
 
-function Room({ lightIntensity, activeSource }: { lightIntensity: number; activeSource: string }) {
+// House model component with GLTF support
+function HouseModel({ 
+  lightIntensity, 
+  brightnessThreshold,
+  weatherCondition = 'sunny' 
+}: { 
+  lightIntensity: number
+  brightnessThreshold: number
+  weatherCondition: string
+}) {
+  const houseRef = useRef<THREE.Group>(null)
+  const indoorLightRef = useRef<THREE.PointLight>(null)
+  
+  // Try to load GLTF model, fallback to basic house if not available
+  let gltf: any = null
+  try {
+    gltf = useGLTF('/models/sus_room.glb')
+  } catch (error) {
+    console.log('GLTF model not found, using fallback')
+  }
+
+  // Calculate indoor light intensity based on user preference
+  // User brightness threshold determines how much artificial light is needed
+  const indoorLightIntensity = (brightnessThreshold / 100) * 1.5
+
+  // Determine if it's "daytime" based on light sensor
+  const isDaytime = lightIntensity > 30
+
+  useFrame((state) => {
+    const time = state.clock.getElapsedTime()
+    
+    // Update indoor light based on user preference
+    if (indoorLightRef.current) {
+      // Smooth transition for indoor lighting
+      const targetIntensity = indoorLightIntensity + Math.sin(time * 2) * 0.05
+      indoorLightRef.current.intensity = targetIntensity
+    }
+
+    // Gentle rotation for GLTF model
+    if (houseRef.current && gltf) {
+      houseRef.current.rotation.y = Math.sin(time * 0.2) * 0.1
+    }
+  })
+
+  if (gltf) {
+    // Render GLTF model
+    return (
+      <group ref={houseRef} position={[0, -0.8, 0]} scale={0.8}>
+        <primitive object={gltf.scene} />
+        
+        {/* Indoor lighting based on user preference */}
+        <pointLight
+          ref={indoorLightRef}
+          position={[0, 1, 0]}
+          intensity={indoorLightIntensity}
+          color="#FFE5B4"
+          distance={4}
+          decay={2}
+        />
+        
+        {/* Additional lights for different rooms if needed */}
+        <pointLight
+          position={[-0.5, 0.8, 0.5]}
+          intensity={indoorLightIntensity * 0.6}
+          color="#FFE5B4"
+          distance={2.5}
+          decay={2}
+        />
+        <pointLight
+          position={[0.5, 0.8, -0.5]}
+          intensity={indoorLightIntensity * 0.6}
+          color="#FFE5B4"
+          distance={2.5}
+          decay={2}
+        />
+      </group>
+    )
+  }
+
+  // Fallback: Basic house model
+  return (
+    <group ref={houseRef} position={[0, -0.8, 0]}>
+      {/* House base */}
+      <mesh position={[0, 0.4, 0]}>
+        <boxGeometry args={[1.2, 0.8, 1.2]} />
+        <meshStandardMaterial 
+          color="#2D3748"
+          emissive="#3B82F6"
+          emissiveIntensity={indoorLightIntensity * 0.3}
+        />
+      </mesh>
+      {/* Roof */}
+      <mesh position={[0, 1, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <coneGeometry args={[0.9, 0.6, 4]} />
+        <meshStandardMaterial 
+          color="#1F2937"
+          emissive="#3B82F6"
+          emissiveIntensity={indoorLightIntensity * 0.2}
+        />
+      </mesh>
+      {/* Indoor light */}
+      <pointLight
+        ref={indoorLightRef}
+        position={[0, 0.6, 0]}
+        intensity={indoorLightIntensity}
+        color="#FFE5B4"
+        distance={3}
+        decay={2}
+      />
+    </group>
+  )
+}
+
+// Sunlight component that changes based on weather and time
+function Sunlight({ 
+  lightIntensity, 
+  weatherCondition = 'sunny',
+  activeSource 
+}: { 
+  lightIntensity: number
+  weatherCondition: string
+  activeSource: string
+}) {
+  const sunRef = useRef<THREE.DirectionalLight>(null)
+  
+  // Determine sunlight color and intensity based on weather
+  const sunlightConfig = useMemo(() => {
+    const isDaytime = lightIntensity > 20
+    
+    if (!isDaytime) {
+      // Night time - no sunlight
+      return { color: '#1a1a2e', intensity: 0.1 }
+    }
+
+    // Daytime sunlight based on weather
+    switch (weatherCondition.toLowerCase()) {
+      case 'sunny':
+      case 'clear':
+        return { 
+          color: '#FFF4E0', // Warm sunny color
+          intensity: Math.min(lightIntensity / 100 * 2, 1.5) 
+        }
+      case 'cloudy':
+      case 'overcast':
+        return { 
+          color: '#E8E8E8', // Cool gray light
+          intensity: Math.min(lightIntensity / 100 * 1.2, 0.8) 
+        }
+      case 'rainy':
+      case 'rain':
+        return { 
+          color: '#C0C0D0', // Blue-ish gray
+          intensity: Math.min(lightIntensity / 100 * 0.8, 0.5) 
+        }
+      case 'foggy':
+      case 'fog':
+        return { 
+          color: '#D0D0D8', // Soft gray
+          intensity: Math.min(lightIntensity / 100 * 0.6, 0.4) 
+        }
+      default:
+        return { 
+          color: '#FFF8DC', // Default warm light
+          intensity: Math.min(lightIntensity / 100 * 1.5, 1.2) 
+        }
+    }
+  }, [lightIntensity, weatherCondition])
+
+  useFrame((state) => {
+    const time = state.clock.getElapsedTime()
+    
+    if (sunRef.current) {
+      // Simulate sun movement during the day
+      const sunAngle = (lightIntensity / 100) * Math.PI
+      sunRef.current.position.x = Math.cos(sunAngle) * 5
+      sunRef.current.position.y = Math.max(Math.sin(sunAngle) * 5, 0.5)
+      sunRef.current.position.z = Math.sin(sunAngle) * 2
+      
+      // Slight intensity variation for realism
+      sunRef.current.intensity = sunlightConfig.intensity + Math.sin(time * 0.5) * 0.05
+    }
+  })
+
+  return (
+    <>
+      {/* Directional sunlight */}
+      <directionalLight
+        ref={sunRef}
+        color={sunlightConfig.color}
+        intensity={sunlightConfig.intensity}
+        position={[3, 4, 2]}
+        castShadow
+      />
+      
+      {/* Ambient light for general scene visibility */}
+      <ambientLight intensity={0.3} color={sunlightConfig.color} />
+      
+      {/* Hemisphere light for sky/ground color variation */}
+      <hemisphereLight
+        color={sunlightConfig.color}
+        groundColor="#2A2A2A"
+        intensity={sunlightConfig.intensity * 0.5}
+      />
+    </>
+  )
+}
+
+function Room({ 
+  lightIntensity, 
+  activeSource,
+  brightnessThreshold,
+  weatherCondition = 'sunny'
+}: { 
+  lightIntensity: number
+  activeSource: string
+  brightnessThreshold: number
+  weatherCondition?: string
+}) {
   const roomRef = useRef<THREE.Group>(null)
-  const lightRef = useRef<THREE.PointLight>(null)
 
   // Source colors
   const sourceColors = {
@@ -22,9 +240,6 @@ function Room({ lightIntensity, activeSource }: { lightIntensity: number; active
     grid: '#EF4444', // Red for grid
   }
 
-  // Normalize light intensity (0-100) to (0.3-1.5) for visual effect
-  const normalizedIntensity = 0.3 + (lightIntensity / 100) * 1.2
-
   useFrame((state) => {
     const time = state.clock.getElapsedTime()
     
@@ -32,11 +247,6 @@ function Room({ lightIntensity, activeSource }: { lightIntensity: number; active
     if (roomRef.current) {
       const pulseFactor = Math.sin(time * 2) * 0.02 + 1
       roomRef.current.scale.set(pulseFactor, pulseFactor, pulseFactor)
-    }
-
-    // Update light intensity smoothly
-    if (lightRef.current) {
-      lightRef.current.intensity = normalizedIntensity + Math.sin(time) * 0.1
     }
   })
 
@@ -52,7 +262,7 @@ function Room({ lightIntensity, activeSource }: { lightIntensity: number; active
       </lineSegments>
 
       {/* Floor with source color */}
-      <mesh position={[0, -1.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, -1.5, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[5, 5]} />
         <meshStandardMaterial 
           color={floorColor}
@@ -63,46 +273,20 @@ function Room({ lightIntensity, activeSource }: { lightIntensity: number; active
         />
       </mesh>
 
-      {/* House representation in center */}
-      <group position={[0, -0.8, 0]}>
-        {/* House base */}
-        <mesh position={[0, 0.4, 0]}>
-          <boxGeometry args={[1.2, 0.8, 1.2]} />
-          <meshStandardMaterial 
-            color="#2D3748"
-            emissive="#3B82F6"
-            emissiveIntensity={0.2}
-          />
-        </mesh>
-        {/* Roof */}
-        <mesh position={[0, 1, 0]} rotation={[0, Math.PI / 4, 0]}>
-          <coneGeometry args={[0.9, 0.6, 4]} />
-          <meshStandardMaterial 
-            color="#1F2937"
-            emissive="#3B82F6"
-            emissiveIntensity={0.1}
-          />
-        </mesh>
-      </group>
-
-      {/* Ceiling light representation */}
-      <mesh position={[0, 1.3, 0]}>
-        <sphereGeometry args={[0.15, 16, 16]} />
-        <meshStandardMaterial 
-          color="#FFF"
-          emissive="#FFF"
-          emissiveIntensity={normalizedIntensity * 2}
+      {/* House with GLTF model support, indoor lighting, and sunlight through windows */}
+      <Suspense fallback={null}>
+        <HouseModel 
+          lightIntensity={lightIntensity}
+          brightnessThreshold={brightnessThreshold}
+          weatherCondition={weatherCondition}
         />
-      </mesh>
+      </Suspense>
 
-      {/* Light source */}
-      <pointLight 
-        ref={lightRef}
-        position={[0, 1.3, 0]} 
-        intensity={normalizedIntensity}
-        color="#FFFFFF"
-        distance={7}
-        decay={2}
+      {/* Weather-based sunlight */}
+      <Sunlight 
+        lightIntensity={lightIntensity}
+        weatherCondition={weatherCondition}
+        activeSource={activeSource}
       />
 
       {/* Power Source Representations */}
@@ -110,9 +294,6 @@ function Room({ lightIntensity, activeSource }: { lightIntensity: number; active
 
       {/* Energy particles flowing from source to house */}
       <EnergyParticles activeSource={activeSource} />
-
-      {/* Ambient light for base visibility */}
-      <ambientLight intensity={0.3} />
     </group>
   )
 }
@@ -331,10 +512,16 @@ function PowerSources({ activeSource }: { activeSource: string }) {
   )
 }
 
-export default function DigitalTwin({ lightIntensity, activeSource, className }: DigitalTwinProps) {
+export default function DigitalTwin({ 
+  lightIntensity, 
+  activeSource, 
+  brightnessThreshold,
+  weatherCondition = 'sunny',
+  className 
+}: DigitalTwinProps) {
   return (
     <div className={className} style={{ width: '100%', height: '100%' }}>
-      <Canvas>
+      <Canvas shadows>
         <PerspectiveCamera makeDefault position={[4, 2, 4]} />
         <OrbitControls 
           enableZoom={true}
@@ -344,7 +531,12 @@ export default function DigitalTwin({ lightIntensity, activeSource, className }:
           autoRotate
           autoRotateSpeed={0.5}
         />
-        <Room lightIntensity={lightIntensity} activeSource={activeSource} />
+        <Room 
+          lightIntensity={lightIntensity} 
+          activeSource={activeSource}
+          brightnessThreshold={brightnessThreshold}
+          weatherCondition={weatherCondition}
+        />
       </Canvas>
     </div>
   )
