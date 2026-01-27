@@ -58,11 +58,19 @@ Most energy systems show you data. **HyperVolt simulates the future and self-opt
 
 **📚 [See detailed Module 2 documentation](./MODULE2_README.md)**
 
-### Module 3: The Prophet (AI Inference Engine)
-*Coming Soon*
+### Module 3: The Prophet (AI Inference Engine) ✅ **[ENHANCED]**
 - LSTM network for demand forecasting
-- Power source selection algorithm
+- Power source selection algorithm with dynamic user preference weights
 - Real-time decision-making based on context
+- MQTT integration for hardware control
+- Simulation mode for testing without hardware sensors
+- Model retraining capabilities
+
+**📚 Key Features:**
+- **Dynamic Weights**: User preferences control AI optimization priorities (cost vs carbon)
+- **Sensor Data Switching**: Toggle between simulation file and real hardware sensors
+- **MQTT Publishing**: Automatically sends decisions to hardware for actuation
+- **Model Retraining**: API endpoint to retrain models with recent data
 
 ### Module 4: The Orchestrator (Digital Twin UI)
 *Coming Soon*
@@ -198,6 +206,140 @@ This is a hackathon project. For any questions or collaboration, please open an 
 ## 📞 Support
 
 For technical issues or questions about Module 2 (Data Pipeline), see the [Module 2 README](./MODULE2_README.md).
+
+## 🔧 AI Inference Configuration
+
+### Sensor Data Modes
+
+The AI inference service supports two modes for reading sensor data:
+
+#### 1. Simulation Mode (Default)
+Perfect for testing without physical hardware. Edit `api/data/simulation_sensors.csv` to simulate different conditions:
+
+```csv
+timestamp,sensor_type,value
+2026-01-27 12:00:00,temperature,28.5
+2026-01-27 12:00:00,humidity,45.0
+2026-01-27 12:00:00,ldr,3500
+2026-01-27 12:00:00,current,1.2
+2026-01-27 12:00:00,voltage,230.0
+```
+
+**LDR Values:**
+- High (3000+) = Daytime / High solar availability
+- Low (<500) = Nighttime / No solar
+
+#### 2. Real Hardware Mode
+When you connect physical sensors, switch to real mode:
+
+```python
+# In api/data_pipeline/services/ai_inference.py
+USE_SIMULATION_FILE = False  # Change to False
+```
+
+The system will automatically read from your database populated by MQTT sensors.
+
+### Dynamic User Preferences
+
+Control AI behavior through user preferences:
+
+```python
+# Set cost priority (0-100)
+UserPreferences.objects.create(
+    preference_key='cost_priority',
+    preference_value=70  # 70% cost focus, 30% carbon focus
+)
+```
+
+The AI will automatically fetch and apply these weights before each optimization.
+
+### API Endpoints
+
+#### Forecast Energy Demand
+```bash
+GET /api/predictions/forecast/?hours=6
+```
+
+#### Get Source Recommendation
+```bash
+POST /api/predictions/recommend_source/
+{
+    "load_name": "HVAC Living Room",
+    "load_priority": 75,
+    "load_power": 2000
+}
+```
+
+#### Make Comprehensive Decision
+```bash
+POST /api/predictions/decide/
+```
+
+This endpoint:
+- Forecasts energy demand
+- Optimizes source allocation
+- Publishes decision to MQTT (`HyperVolt/commands/control`)
+
+#### Retrain AI Model
+```bash
+POST /api/predictions/retrain/
+```
+
+Exports recent data from database, retrains the model, and reloads it into memory.
+
+### MQTT Integration
+
+The AI service publishes decisions to MQTT for hardware actuation:
+
+**Topic:** `HyperVolt/commands/control`
+
+**Payload:**
+```json
+{
+    "command": "switch_source",
+    "source": "solar",
+    "details": {
+        "predicted_demand_kwh": 1.5,
+        "source_allocation": [["solar", 1.0], ["battery", 0.5]],
+        "cost": 3.5,
+        "carbon": 250.0
+    },
+    "timestamp": "2026-01-27T12:00:00Z"
+}
+```
+
+Your hardware (ESP32/Raspberry Pi) should subscribe to this topic and execute the physical switch.
+
+### Testing the AI Service
+
+1. **Check AI Status:**
+```bash
+GET /api/predictions/status/
+```
+
+2. **Test with Simulation Data:**
+```bash
+# Edit api/data/simulation_sensors.csv
+# Change ldr to 4000 (daytime)
+GET /api/predictions/forecast/
+
+# Expected: Recommends solar power
+```
+
+3. **Test Night Scenario:**
+```bash
+# Change ldr to 100 (nighttime)
+GET /api/predictions/forecast/
+
+# Expected: Recommends grid/battery
+```
+
+4. **Switch to Real Sensors:**
+```python
+# Set USE_SIMULATION_FILE = False
+# Restart Django server
+# AI will now read from SensorReading database table
+```
 
 ---
 
