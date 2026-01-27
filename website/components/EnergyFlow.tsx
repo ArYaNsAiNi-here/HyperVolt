@@ -116,28 +116,25 @@ function EnergyPath({
   isActive: boolean
   color: string
 }) {
-  // Calculate path
+  // Calculate path using percentages for responsive design
   const midX = (from.x + to.x) / 2
-  const midY = (from.y + to.y) / 2 - 10 // Curve upward
+  const midY = (from.y + to.y) / 2 - 5 // Slight curve
 
-  const pathD = `M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`
+  const pathD = `M ${from.x}% ${from.y}% Q ${midX}% ${midY}% ${to.x}% ${to.y}%`
 
   return (
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      style={{ zIndex: 0 }}
-    >
+    <>
       {/* Path line */}
       <motion.path
         d={pathD}
         fill="none"
         stroke={color}
-        strokeWidth="2"
-        strokeDasharray="5,5"
+        strokeWidth="3"
+        strokeDasharray="8,4"
         initial={{ pathLength: 0, opacity: 0.3 }}
         animate={{ 
           pathLength: isActive ? 1 : 0,
-          opacity: isActive ? 0.6 : 0.2,
+          opacity: isActive ? 0.8 : 0.2,
         }}
         transition={{ duration: 0.5 }}
       />
@@ -146,7 +143,7 @@ function EnergyPath({
       {isActive && (
         <>
           <motion.circle
-            r="4"
+            r="5"
             fill={color}
             initial={{ offsetDistance: '0%', opacity: 1 }}
             animate={{ offsetDistance: '100%', opacity: 0 }}
@@ -161,7 +158,7 @@ function EnergyPath({
             }}
           />
           <motion.circle
-            r="4"
+            r="5"
             fill={color}
             initial={{ offsetDistance: '0%', opacity: 1 }}
             animate={{ offsetDistance: '100%', opacity: 0 }}
@@ -169,7 +166,22 @@ function EnergyPath({
               duration: 2,
               repeat: Infinity,
               ease: 'linear',
-              delay: 0.5,
+              delay: 0.7,
+            }}
+            style={{
+              offsetPath: `path("${pathD}")`,
+            }}
+          />
+          <motion.circle
+            r="5"
+            fill={color}
+            initial={{ offsetDistance: '0%', opacity: 1 }}
+            animate={{ offsetDistance: '100%', opacity: 0 }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: 'linear',
+              delay: 1.4,
             }}
             style={{
               offsetPath: `path("${pathD}")`,
@@ -177,7 +189,7 @@ function EnergyPath({
           />
         </>
       )}
-    </svg>
+    </>
   )
 }
 
@@ -189,20 +201,12 @@ export default function EnergyFlow({
   homeConsumption,
   className,
 }: EnergyFlowProps) {
-  // Node positions (percentage)
+  // Node positions (percentage) - adjusted to keep all nodes within bounds
   const positions = {
-    solar: { x: 15, y: 20 },
-    battery: { x: 15, y: 80 },
+    solar: { x: 20, y: 25 },
+    battery: { x: 20, y: 70 },
     grid: { x: 50, y: 50 },
-    home: { x: 85, y: 50 },
-  }
-
-  // Calculate pixel positions for paths (assuming 100% width/height)
-  const pathPositions = {
-    solar: { x: 150, y: 100 },
-    battery: { x: 150, y: 400 },
-    grid: { x: 500, y: 250 },
-    home: { x: 850, y: 250 },
+    home: { x: 80, y: 50 },
   }
 
   const colors = {
@@ -212,28 +216,28 @@ export default function EnergyFlow({
   }
 
   return (
-    <div className={cn('relative w-full h-full bg-gray-900/50 rounded-lg p-8', className)}>
-      {/* Energy paths */}
-      <div className="absolute inset-0">
+    <div className={cn('relative w-full h-full bg-gray-900/50 rounded-lg p-8 overflow-hidden', className)}>
+      {/* Energy paths - using percentage-based positioning */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
         <EnergyPath
-          from={pathPositions.solar}
-          to={pathPositions.home}
+          from={positions.solar}
+          to={positions.home}
           isActive={activeSource === 'solar'}
           color={colors.solar}
         />
         <EnergyPath
-          from={pathPositions.battery}
-          to={pathPositions.home}
+          from={positions.battery}
+          to={positions.home}
           isActive={activeSource === 'battery'}
           color={colors.battery}
         />
         <EnergyPath
-          from={pathPositions.grid}
-          to={pathPositions.home}
+          from={positions.grid}
+          to={positions.home}
           isActive={activeSource === 'grid'}
           color={colors.grid}
         />
-      </div>
+      </svg>
 
       {/* Source nodes */}
       <SourceNode
