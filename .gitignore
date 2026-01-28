@@ -1,0 +1,13 @@
+.idea
+.venv
+/website/.vercel
+/website/node_modules
+/website/.next
+.DS_Store
+.env
+.env.local
+
+/api/.env
+/api/.env.example
+
+/ai/.env.example
