@@ -17,6 +17,8 @@ import json
 from django.conf import settings
 from django.utils import timezone
 import paho.mqtt.publish as publish
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 # Add AI module to path
 AI_MODULE_PATH = os.path.join(settings.BASE_DIR, '..', 'ai', 'module3-ai')
@@ -55,7 +57,7 @@ class AIInferenceService:
         
         if AI_AVAILABLE:
             self._initialize_models()
-    
+
     def _initialize_models(self):
         """Initialize and load AI models"""
         try:
@@ -64,14 +66,30 @@ class AIInferenceService:
                 lookback_hours=24,
                 forecast_horizon=6
             )
-            
-            # Try to load pre-trained model
-            model_path = os.path.join(settings.BASE_DIR, '..', 'ai', 'models')
+
+            # --- FIX STARTS HERE ---
+            # 1. Construct the absolute path to the 'ai/models' directory
+            # settings.BASE_DIR is '.../HyperVolt/api'
+            # We go up one level (..) then into 'ai/models'
+            ai_models_dir = os.path.join(settings.BASE_DIR, '..', 'ai', 'models')
+            ai_models_dir = os.path.abspath(ai_models_dir)  # Resolve '..' to make it clean
+
+            # 2. Define the specific model file path
+            model_path = os.path.join(ai_models_dir, 'demand_forecaster.h5')
+
             if os.path.exists(model_path):
-                self.forecaster.load_model()
+                print(f"Loading AI model from: {model_path}")
+                # Pass the explicit path to the loader
+                self.forecaster.load_model(model_path)
                 self.models_loaded = True
-            
+            else:
+                print(f"Warning: Model file not found at {model_path}")
+                self.models_loaded = False
+            # --- FIX ENDS HERE ---
+
             # Initialize optimizer
+            # Note: You might need to do similar path fixing inside SourceOptimizer
+            # if it fails to load 'solar_dust_random_forest.pkl'
             self.optimizer = SourceOptimizer(
                 carbon_weight=0.5,
                 cost_weight=0.5,
@@ -79,9 +97,9 @@ class AIInferenceService:
                 battery_capacity=10.0,
                 battery_max_discharge=2.0
             )
-            
+
             print("✓ AI models initialized successfully")
-            
+
         except Exception as e:
             print(f"Warning: Could not initialize AI models: {e}")
             self.models_loaded = False
@@ -305,35 +323,51 @@ class AIInferenceService:
                 'error': f'Decision making failed: {str(e)}',
                 'available': False
             }
-    
+
     def _publish_decision_to_mqtt(self, decision_data: Dict):
-        """Publish AI decision to MQTT for hardware actuation"""
+        """Publish AI decision to MQTT AND WebSockets"""
         try:
-            # Extract the primary source (highest allocation)
+            # 1. MQTT Publish (Existing code)
             allocations = decision_data.get('source_allocation', [])
             if not allocations:
                 return
-                
-            primary_source = allocations[0][0]  # e.g., 'solar'
-            
+
+            primary_source = allocations[0][0]
+
             payload = {
                 'command': 'switch_source',
                 'source': primary_source,
                 'details': decision_data,
                 'timestamp': timezone.now().isoformat()
             }
-            
-            # Publish to local broker (assuming Mosquitto is running on same device)
+
+            # [Existing MQTT Code ...]
             publish.single(
                 "HyperVolt/commands/control",
                 payload=json.dumps(payload),
-                hostname="localhost", 
+                hostname="localhost",
                 port=1883
             )
             print(f"✓ Published AI decision to MQTT: {primary_source}")
+
+            # 2. NEW: WebSocket Broadcast (To Frontend)
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "sensors",  # Broadcast to the 'sensors' group (dashboard listeners)
+                {
+                    "type": "sensor.update",  # Re-using existing handler in consumers.py
+                    "data": {
+                        "type": "ai_decision",
+                        "payload": payload
+                    }
+                }
+            )
+            print(f"✓ Broadcasted AI decision to Frontend")
+
         except Exception as e:
-            print(f"Failed to publish AI decision to MQTT: {e}")
-    
+            print(f"Failed to publish AI decision: {e}")
+
+
     def trigger_retraining(self) -> Dict:
         """Triggers the AI retraining process"""
         if not self.is_available():

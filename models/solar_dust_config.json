@@ -1,0 +1,14 @@
+{
+  "model_type": "random_forest",
+  "feature_columns": [
+    "solar_irradiance",
+    "temperature_c",
+    "ldr_lux",
+    "expected_power_kw",
+    "actual_power_kw",
+    "efficiency_ratio",
+    "days_since_cleaning",
+    "hour"
+  ],
+  "trained_date": "2026-01-26T21:16:51.915563"
+}

@@ -78,6 +78,7 @@ export interface WebSocketMessage {
   type: 'sensor_update' | 'source_switch' | 'ai_decision' | 'error' | 'echo'
   data?: any
   message?: string
+  payload: any;
 }
 
 // AI Forecast Types

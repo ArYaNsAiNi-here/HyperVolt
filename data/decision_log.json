@@ -1,0 +1,26 @@
+[
+  {
+    "timestamp": "2026-01-26T21:16:34.098103",
+    "forecast_6h": [
+      0.9879264831542969,
+      0.7499904632568359,
+      0.6334681510925293,
+      0.5283957123756409,
+      0.4764675199985504,
+      0.4282723665237427
+    ],
+    "current_hour": {
+      "predicted_demand": 0.9879264831542969,
+      "source_allocation": [
+        [
+          "battery",
+          0.9879264831542969
+        ]
+      ],
+      "cost": 0.0987926498055458,
+      "carbon": 402.8873724252169,
+      "battery_charge": 7.012073516845703
+    },
+    "recommendation": "Drawing from battery (cost-effective)",
+    "actual_demand": 1.563922601682992,
+    "timestamp_hour": 
