@@ -82,7 +82,8 @@ python generate_sensor_data.py
 ### 1. Install Dependencies
 
 ```bash
-pip install -r ../requirements.txt
+# From the root HyperVolt directory
+pip install -r requirements.txt
 ```
 
 ### 2. Configure API Keys (Optional)
@@ -206,7 +207,7 @@ After running `collect_all_data.py`, you'll see statistics like:
 **Solution**: Scripts automatically fall back to synthetic data generation
 
 **Issue**: Missing dependencies
-**Solution**: Run `pip install -r ../requirements.txt`
+**Solution**: Run `pip install -r ../../requirements.txt` from the ai/module3-ai directory, or `pip install -r requirements.txt` from the root directory
 
 **Issue**: Data files not created
 **Solution**: Check if `../data/raw/` directory exists and is writable

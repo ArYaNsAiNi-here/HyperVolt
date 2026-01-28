@@ -636,3 +636,24 @@ class AIPredictionViewSet(viewsets.ViewSet):
                 print(f"Warning: Could not record decision: {e}")
         
         return Response(result)
+    
+    @action(detail=False, methods=['post'])
+    def retrain(self, request):
+        """
+        Trigger AI model retraining using recent data from the database.
+        
+        This endpoint exports recent sensor and grid data to CSV format,
+        retrains the AI models, and reloads them into memory.
+        
+        Returns:
+        {
+            "success": true,
+            "message": "Model retrained and reloaded"
+        }
+        """
+        result = self.ai_service.trigger_retraining()
+        
+        if result.get('success'):
+            return Response(result, status=status.HTTP_200_OK)
+        else:
+            return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

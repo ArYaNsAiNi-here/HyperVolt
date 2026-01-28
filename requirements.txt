@@ -1,3 +1,13 @@
+# ============================================
+# HyperVolt - Unified Requirements
+# ============================================
+# This file contains all dependencies for the complete HyperVolt system
+# including Django API (Module 2) and AI/ML components (Module 3)
+
+# ============================================
+# CORE DJANGO & API
+# ============================================
+
 # Core Django
 Django>=6.0rc1,<5.1
 django-environ>=0.11.0
@@ -10,9 +20,6 @@ django-cors-headers>=4.3.0
 channels>=4.0.0
 channels-redis>=4.2.0
 daphne>=4.1.0
-
-# MQTT
-paho-mqtt>=2.0.0
 
 # Task Scheduling
 django-q2>=1.6.0
@@ -30,6 +37,18 @@ python-dateutil>=2.8.0
 
 # Utilities
 pytz>=2024.1
+
+# ============================================
+# MQTT & IOT COMMUNICATION
+# ============================================
+
+# MQTT Protocol (unified version)
+paho-mqtt>=2.0.0
+
+# ============================================
+# AI & MACHINE LEARNING
+# ============================================
+
 # Core Data Science Libraries
 numpy>=1.24.0
 pandas>=2.0.0
@@ -62,10 +81,24 @@ paho-mqtt>=1.6.1
 python-dotenv>=1.0.0
 pyyaml>=6.0
 
+# API and Web Requests (async support)
+aiohttp>=3.8.0
+
 # Utilities
 tqdm>=4.65.0
 joblib>=1.3.0
 
-# Testing
+# ============================================
+# TESTING
+# ============================================
+
 pytest>=7.4.0
 pytest-cov>=4.1.0
+
+# ============================================
+# NOTES
+# ============================================
+# - paho-mqtt version unified to >=2.0.0 (latest)
+# - requests is already included in Django section
+# - All AI/ML dependencies from ai/requirements.txt merged here
+# - To install: pip install -r requirements.txt

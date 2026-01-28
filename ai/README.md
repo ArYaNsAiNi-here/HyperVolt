@@ -45,7 +45,6 @@ HyperVolt/
 ├── models/                   # Trained AI models
 ├── notebooks/                # Jupyter notebooks for analysis
 ├── scripts/                  # Utility scripts
-├── requirements.txt          # Python dependencies
 ├── .env.example             # Environment variables template
 └── README.md                # This file
 ```
@@ -129,6 +128,8 @@ This is the brain of Vesta! Features:
 
 2. **Install Python dependencies**
    ```bash
+   # From the root HyperVolt directory
+   cd ..
    pip install -r requirements.txt
    ```
 
