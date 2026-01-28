@@ -1,0 +1,8 @@
+{
+  "carbon_weight": 0.5,
+  "cost_weight": 0.5,
+  "solar_capacity": 3.0,
+  "battery_capacity": 10.0,
+  "battery_max_discharge": 2.0,
+  "simulation_date": "2026-01-26T09:50:10.634350"
+}

@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react' // Fixed: Added useState
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertCircle, CheckCircle, Info, Zap } from 'lucide-react'
 import { cn, formatTimestamp } from '@/lib/utils'
 import { StrategyLogEntry } from '@/lib/types'
+import { useWebSocket } from '@/hooks/useWebSocket'
 
+// Fixed: Renamed 'logs' to 'initialLogs' to avoid conflict with state variable
 interface StrategyNarratorProps {
-  logs: StrategyLogEntry[]
+  initialLogs?: StrategyLogEntry[]
   className?: string
+  logs: StrategyLogEntry[];
 }
 
 function LogItem({ log }: { log: StrategyLogEntry }) {
@@ -26,6 +29,9 @@ function LogItem({ log }: { log: StrategyLogEntry }) {
     decision: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
   }
 
+  // Fallback to info if type is unknown
+  const type = log.type || 'info'
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -34,11 +40,11 @@ function LogItem({ log }: { log: StrategyLogEntry }) {
       transition={{ duration: 0.3 }}
       className={cn(
         'p-3 rounded-lg border mb-2 backdrop-blur-sm',
-        colors[log.type]
+        colors[type] || colors.info
       )}
     >
       <div className="flex items-start gap-3">
-        <div className="mt-0.5">{icons[log.type]}</div>
+        <div className="mt-0.5">{icons[type] || icons.info}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
             <span className="text-xs text-gray-400 font-mono">
@@ -55,10 +61,42 @@ function LogItem({ log }: { log: StrategyLogEntry }) {
   )
 }
 
-export default function StrategyNarrator({ logs, className }: StrategyNarratorProps) {
+export default function StrategyNarrator({ initialLogs = [], className }: StrategyNarratorProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when new logs arrive
+  // Fixed: Initialize state with the renamed prop 'initialLogs'
+  const [logs, setLogs] = useState<StrategyLogEntry[]>(initialLogs)
+
+  const { lastMessage } = useWebSocket()
+
+  // Fixed: Defined the missing addLog function so useEffect can call it
+  const addLog = (newLog: Omit<StrategyLogEntry, 'id'>) => {
+    setLogs((prev) => [
+      ...prev,
+      { ...newLog, id: Math.random().toString(36).substr(2, 9) }
+    ])
+  }
+
+  useEffect(() => {
+    if (!lastMessage) return
+
+    // Handle AI Decisions pushed from Backend
+    if (lastMessage.type === 'ai_decision' || (lastMessage.data && lastMessage.data.type === 'ai_decision')) {
+       // Robust check for different payload structures
+       const decision = lastMessage.payload || (lastMessage.data && lastMessage.data.payload) || lastMessage
+
+       if (decision) {
+         addLog({
+           timestamp: new Date().toISOString(),
+           type: 'decision',
+           message: `Optimizing Source: Switching to ${decision.source?.toUpperCase() || 'UNKNOWN'}`,
+           details: decision.details?.reasoning || "AI Context Optimization",
+         })
+       }
+    }
+  }, [lastMessage])
+
+  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -67,18 +105,16 @@ export default function StrategyNarrator({ logs, className }: StrategyNarratorPr
 
   return (
     <div className={cn('flex flex-col h-full bg-gray-900/50 rounded-lg', className)}>
-      {/* Header */}
       <div className="px-4 py-3 border-b border-gray-700/50">
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
           <Zap className="w-5 h-5 text-purple-400" />
           AI Strategy Narrator
         </h3>
         <p className="text-xs text-gray-400 mt-1">
-          Real-time decision explanations and system events
+          Real-time decision explanations
         </p>
       </div>
 
-      {/* Log list */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-800"
@@ -101,7 +137,6 @@ export default function StrategyNarrator({ logs, className }: StrategyNarratorPr
         </AnimatePresence>
       </div>
 
-      {/* Footer stats */}
       <div className="px-4 py-2 border-t border-gray-700/50 bg-gray-800/50">
         <div className="flex items-center justify-between text-xs text-gray-400">
           <span>{logs.length} events logged</span>
