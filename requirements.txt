@@ -9,7 +9,7 @@
 # ============================================
 
 # Core Django
-Django>=5.0,<5.1
+Django>=6.0rc1,<5.1
 django-environ>=0.11.0
 
 # REST Framework
@@ -63,12 +63,19 @@ matplotlib>=3.7.0
 seaborn>=0.12.0
 plotly>=5.14.0
 
+# API and Web Requests
+requests>=2.31.0
+aiohttp>=3.8.0
+
 # Time Series Analysis
 statsmodels>=0.14.0
 
-# Database and Storage (AI-specific)
+# Database and Storage
 influxdb-client>=1.36.0
 firebase-admin>=6.2.0
+
+# MQTT for IoT Communication
+paho-mqtt>=1.6.1
 
 # Configuration Management
 python-dotenv>=1.0.0
