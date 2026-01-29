@@ -114,7 +114,7 @@ export default function StatsGrid({ carbonSavings, costSavings, powerConsumption
       <StatCard
         title="Cost Savings"
         value={costSavings.toFixed(2)}
-        unit="USD"
+        unit="₹"
         change={-8.3}
         icon={<DollarSign className="w-6 h-6" />}
         color="yellow"

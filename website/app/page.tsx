@@ -10,13 +10,20 @@ import StatsGrid from '@/components/StatsGrid'
 import StrategyNarrator from '@/components/StrategyNarrator'
 import EnergyChart from '@/components/EnergyChart'
 import BrightnessControl from '@/components/BrightnessControl'
+import CarbonIntensityChart from '@/components/CarbonIntensityChart'
+import PowerDistribution from '@/components/PowerDistribution'
+import EfficiencyChart from '@/components/EfficiencyChart'
+import RealTimeMetrics from '@/components/RealTimeMetrics'
 
 // Dynamic imports for 3D components (client-side only)
 const DigitalTwin = dynamic(() => import('@/components/DigitalTwin'), {
   ssr: false,
   loading: () => (
     <div className="w-full h-full flex items-center justify-center bg-gray-900/50 rounded-lg">
-      <div className="text-gray-500">Loading 3D View...</div>
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="text-gray-400">Initializing 3D Engine...</div>
+      </div>
     </div>
   ),
 })
@@ -25,7 +32,10 @@ const EnergyFlow = dynamic(() => import('@/components/EnergyFlow'), {
   ssr: false,
   loading: () => (
     <div className="w-full h-full flex items-center justify-center bg-gray-900/50 rounded-lg">
-      <div className="text-gray-500">Loading Energy Flow...</div>
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+        <div className="text-gray-400">Loading Energy Flow...</div>
+      </div>
     </div>
   ),
 })
@@ -50,6 +60,9 @@ export default function Dashboard() {
     grid: 0,
     home: 0,
   })
+  const [carbonHistory, setCarbonHistory] = useState<Array<{ timestamp: string; value: number }>>([])
+  const [efficiencyHistory, setEfficiencyHistory] = useState<Array<{ timestamp: string; efficiency: number }>>([])
+  const [is3DModelLoaded, setIs3DModelLoaded] = useState(false)
 
   // WebSocket connection for real-time updates
   const { isConnected, lastMessage } = useWebSocket(undefined, {
@@ -152,6 +165,12 @@ export default function Dashboard() {
         // Get current carbon intensity
         const carbonData = await apiService.getCurrentCarbonIntensity()
         
+        // Add to history
+        setCarbonHistory(prev => {
+          const newHistory = [...prev, { timestamp: new Date().toISOString(), value: carbonData.value }]
+          return newHistory.slice(-20) // Keep last 20 entries
+        })
+        
         addLog({
           id: (Date.now() + 2).toString(),
           timestamp: new Date().toISOString(),
@@ -198,13 +217,38 @@ export default function Dashboard() {
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        // Simulate stats update (in production, fetch from API)
-        setStats(prev => ({
-          ...prev,
-          carbonSavings: prev.carbonSavings + Math.random() * 0.1,
-          costSavings: prev.costSavings + Math.random() * 0.05,
-          powerConsumption: 1.0 + Math.random() * 0.5,
-        }))
+        // Update stats with more realistic variations
+        setStats(prev => {
+          const newEfficiency = Math.min(100, Math.max(70, prev.efficiency + (Math.random() - 0.5) * 3))
+          
+          // Add efficiency to history
+          setEfficiencyHistory(prevHistory => {
+            const newHistory = [...prevHistory, { 
+              timestamp: new Date().toISOString(), 
+              efficiency: newEfficiency 
+            }]
+            return newHistory.slice(-20) // Keep last 20 entries
+          })
+          
+          return {
+            ...prev,
+            carbonSavings: prev.carbonSavings + Math.random() * 0.1,
+            costSavings: prev.costSavings + Math.random() * 0.05,
+            powerConsumption: 1.0 + Math.random() * 0.5,
+            efficiency: newEfficiency,
+          }
+        })
+
+        // Periodically fetch carbon data
+        try {
+          const carbonData = await apiService.getCurrentCarbonIntensity()
+          setCarbonHistory(prev => {
+            const newHistory = [...prev, { timestamp: new Date().toISOString(), value: carbonData.value }]
+            return newHistory.slice(-20)
+          })
+        } catch (error) {
+          // Silently handle error for periodic updates
+        }
       } catch (error) {
         console.error('Failed to refresh data:', error)
       }
@@ -289,16 +333,23 @@ export default function Dashboard() {
                   brightnessThreshold={brightnessThreshold}
                   weatherCondition={weatherCondition}
                   className="w-full h-full"
+                  onLoadingComplete={(success) => setIs3DModelLoaded(success)}
                 />
               </div>
             </div>
           </div>
 
-          {/* Brightness Control */}
-          <div>
+          {/* Right Column - Brightness Control and Real-Time Metrics */}
+          <div className="space-y-6">
             <BrightnessControl
               value={brightnessThreshold}
               onChange={handleBrightnessChange}
+            />
+            <RealTimeMetrics
+              powerConsumption={stats.powerConsumption}
+              costRate={stats.costSavings * 60} // Convert to hourly rate
+              carbonRate={stats.carbonSavings * 1000 / 24} // Rough hourly rate
+              efficiency={stats.efficiency}
             />
           </div>
         </div>
@@ -316,7 +367,29 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Bottom Grid */}
+        {/* Charts Grid - 3 columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Power Distribution */}
+          <div>
+            <PowerDistribution
+              solarOutput={energyOutputs.solar}
+              batteryOutput={energyOutputs.battery}
+              gridOutput={energyOutputs.grid}
+            />
+          </div>
+
+          {/* Carbon Intensity History */}
+          <div>
+            <CarbonIntensityChart data={carbonHistory} />
+          </div>
+
+          {/* Efficiency Chart */}
+          <div>
+            <EfficiencyChart data={efficiencyHistory} />
+          </div>
+        </div>
+
+        {/* Bottom Grid - Energy Forecast and Strategy Logs */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Energy Forecast Chart */}
           <div>
