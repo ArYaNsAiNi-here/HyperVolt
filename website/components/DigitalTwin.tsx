@@ -243,11 +243,11 @@ export default function DigitalTwin({
         style={{ width: '100%', height: '100%' }}
       >
         <Canvas shadows dpr={[1, 2]}>
-          <PerspectiveCamera makeDefault position={[12, 8, 12]} fov={50} />
+          <PerspectiveCamera makeDefault position={[15, 10, 15]} fov={55} />
           <OrbitControls
             enablePan={false}
-            minDistance={8}
-            maxDistance={20}
+            minDistance={10}
+            maxDistance={25}
             autoRotate
             autoRotateSpeed={0.5}
             target={[0, 0, 0]}

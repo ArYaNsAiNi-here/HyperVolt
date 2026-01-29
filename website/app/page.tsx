@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { Activity, Zap } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import apiService from '@/lib/api-service'
 import { StrategyLogEntry, WebSocketMessage, ForecastPrediction } from '@/lib/types'
@@ -14,23 +15,13 @@ import CarbonIntensityChart from '@/components/CarbonIntensityChart'
 import PowerDistribution from '@/components/PowerDistribution'
 import EfficiencyChart from '@/components/EfficiencyChart'
 import RealTimeMetrics from '@/components/RealTimeMetrics'
+import HeroSection from '@/components/HeroSection'
+import LogsViewer from '@/components/LogsViewer'
 
 // Constants
 const MAX_HISTORY_ENTRIES = 20
 
 // Dynamic imports for 3D components (client-side only)
-const DigitalTwin = dynamic(() => import('@/components/DigitalTwin'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-900/50 rounded-lg">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <div className="text-gray-400">Initializing 3D Engine...</div>
-      </div>
-    </div>
-  ),
-})
-
 const EnergyFlow = dynamic(() => import('@/components/EnergyFlow'), {
   ssr: false,
   loading: () => (
@@ -65,7 +56,10 @@ export default function Dashboard() {
   })
   const [carbonHistory, setCarbonHistory] = useState<Array<{ timestamp: string; value: number }>>([])
   const [efficiencyHistory, setEfficiencyHistory] = useState<Array<{ timestamp: string; efficiency: number }>>([])
-
+  
+  // Scroll state
+  const [scrolled, setScrolled] = useState(false)
+  const dashboardRef = useRef<HTMLDivElement>(null)
 
   // WebSocket connection for real-time updates
   const { isConnected, lastMessage } = useWebSocket(undefined, {
@@ -122,6 +116,21 @@ export default function Dashboard() {
   const addLog = useCallback((log: StrategyLogEntry) => {
     setStrategyLogs(prev => [...prev.slice(-50), log]) // Keep last 50 logs
   }, [])
+
+  // Scroll detection
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 100)
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Scroll to dashboard function
+  const scrollToDashboard = () => {
+    dashboardRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   // Fetch initial data and AI forecast
   useEffect(() => {
@@ -283,142 +292,154 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      {/* Header */}
-      <header className="border-b border-gray-700/50 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
-                <Zap className="w-6 h-6 text-white" />
+      {/* Hero Section - Full Viewport 3D Model */}
+      <HeroSection
+        lightIntensity={lightIntensity}
+        activeSource={activeSource}
+        brightnessThreshold={brightnessThreshold}
+        weatherCondition={weatherCondition}
+        onScrollClick={scrollToDashboard}
+      />
+
+      {/* Dashboard Content - Fades in on scroll */}
+      <motion.div
+        ref={dashboardRef}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: scrolled ? 1 : 0.3 }}
+        transition={{ duration: 0.6 }}
+      >
+        {/* Header */}
+        <header className="border-b border-gray-700/50 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
+          <div className="container mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-white">HyperVolt</h1>
+                  <p className="text-xs text-gray-400">AI-Driven Energy Orchestrator</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">HyperVolt</h1>
-                <p className="text-xs text-gray-400">AI-Driven Energy Orchestrator</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full border border-gray-700">
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                <span className="text-xs text-gray-300">
-                  {isConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full border border-gray-700">
-                <Activity className="w-4 h-4 text-blue-400" />
-                <span className="text-xs text-gray-300">
-                  {energyOutputs.home.toFixed(2)} kW
-                </span>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full border border-gray-700">
+                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <span className="text-xs text-gray-300">
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full border border-gray-700">
+                  <Activity className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs text-gray-300">
+                    {energyOutputs.home.toFixed(2)} kW
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Dashboard */ }
-      <main className="container mx-auto px-6 py-8">
-        {/* Stats Grid */}
-        <div className="mb-8">
-          <StatsGrid
-            carbonSavings={stats.carbonSavings}
-            costSavings={stats.costSavings}
-            powerConsumption={stats.powerConsumption}
-            efficiency={stats.efficiency}
-          />
-        </div>
+        {/* Main Dashboard */}
+        <main className="container mx-auto px-6 py-8">
+          {/* Stats Grid */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: scrolled ? 1 : 0, y: scrolled ? 0 : 20 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="mb-8"
+          >
+            <StatsGrid
+              carbonSavings={stats.carbonSavings}
+              costSavings={stats.costSavings}
+              powerConsumption={stats.powerConsumption}
+              efficiency={stats.efficiency}
+            />
+          </motion.div>
 
-        {/* Main Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Digital Twin - 3D Visualization */}
-          <div className="lg:col-span-2">
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/50">
-              <h2 className="text-lg font-semibold text-white mb-4">Digital Twin - Real-time Room Model</h2>
+          {/* Main Grid Layout */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: scrolled ? 1 : 0, y: scrolled ? 0 : 20 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"
+          >
+            {/* Brightness Control and Real-Time Metrics */}
+            <div className="space-y-6">
+              <BrightnessControl
+                value={brightnessThreshold}
+                onChange={handleBrightnessChange}
+              />
+              <RealTimeMetrics
+                powerConsumption={stats.powerConsumption}
+                costRate={stats.costSavings * 60}
+                carbonRate={stats.carbonSavings * 1000 / 24}
+                efficiency={stats.efficiency}
+              />
+            </div>
+            
+            {/* Energy Flow and Power Distribution */}
+            <div className="lg:col-span-2 space-y-6">
               <div className="h-[400px]">
-                <DigitalTwin 
-                  lightIntensity={lightIntensity} 
+                <EnergyFlow
                   activeSource={activeSource}
-                  brightnessThreshold={brightnessThreshold}
-                  weatherCondition={weatherCondition}
-                  className="w-full h-full"
+                  solarOutput={energyOutputs.solar}
+                  batteryOutput={energyOutputs.battery}
+                  gridOutput={energyOutputs.grid}
+                  homeConsumption={energyOutputs.home}
+                />
+              </div>
+              <div>
+                <PowerDistribution
+                  solarOutput={energyOutputs.solar}
+                  batteryOutput={energyOutputs.battery}
+                  gridOutput={energyOutputs.grid}
                 />
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Right Column - Brightness Control and Real-Time Metrics */}
-          <div className="space-y-6">
-            <BrightnessControl
-              value={brightnessThreshold}
-              onChange={handleBrightnessChange}
-            />
-            <RealTimeMetrics
-              powerConsumption={stats.powerConsumption}
-              costRate={stats.costSavings * 60} // Convert to hourly rate
-              carbonRate={stats.carbonSavings * 1000 / 24} // Rough hourly rate
-              efficiency={stats.efficiency}
-            />
-          </div>
-        </div>
+          {/* Charts Grid */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: scrolled ? 1 : 0, y: scrolled ? 0 : 20 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"
+          >
+            {/* Carbon Intensity History */}
+            <div>
+              <CarbonIntensityChart data={carbonHistory} />
+            </div>
 
-        {/* Energy Flow Visualization */}
-        <div className="mb-8">
-          <div className="h-[400px]">
-            <EnergyFlow
-              activeSource={activeSource}
-              solarOutput={energyOutputs.solar}
-              batteryOutput={energyOutputs.battery}
-              gridOutput={energyOutputs.grid}
-              homeConsumption={energyOutputs.home}
-            />
-          </div>
-        </div>
+            {/* Efficiency Chart */}
+            <div>
+              <EfficiencyChart data={efficiencyHistory} />
+            </div>
+          </motion.div>
 
-        {/* Charts Grid - 3 columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Power Distribution */}
-          <div>
-            <PowerDistribution
-              solarOutput={energyOutputs.solar}
-              batteryOutput={energyOutputs.battery}
-              gridOutput={energyOutputs.grid}
-            />
-          </div>
-
-          {/* Carbon Intensity History */}
-          <div>
-            <CarbonIntensityChart data={carbonHistory} />
-          </div>
-
-          {/* Efficiency Chart */}
-          <div>
-            <EfficiencyChart data={efficiencyHistory} />
-          </div>
-        </div>
-
-        {/* Bottom Grid - Energy Forecast and Strategy Logs */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Energy Forecast Chart */}
-          <div>
+          {/* Bottom Grid - Energy Forecast */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: scrolled ? 1 : 0, y: scrolled ? 0 : 20 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="mb-8"
+          >
             <EnergyChart forecastData={forecastData} />
-          </div>
+          </motion.div>
+        </main>
 
-          {/* Strategy Narrator */}
-          <div>
-            <div className="h-[400px]">
-              <StrategyNarrator logs={strategyLogs} />
+        {/* Footer */}
+        <footer className="border-t border-gray-700/50 bg-gray-900/80 backdrop-blur-sm mt-12">
+          <div className="container mx-auto px-6 py-4">
+            <div className="text-center text-sm text-gray-400">
+              <p>HyperVolt - SMVIT Sustainergy Hackathon 2026</p>
+              <p className="text-xs mt-1">Built with ❤️ by HyperHawks Team</p>
             </div>
           </div>
-        </div>
-      </main>
+        </footer>
+      </motion.div>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-700/50 bg-gray-900/80 backdrop-blur-sm mt-12">
-        <div className="container mx-auto px-6 py-4">
-          <div className="text-center text-sm text-gray-400">
-            <p>HyperVolt - SMVIT Sustainergy Hackathon 2026</p>
-            <p className="text-xs mt-1">Built with ❤️ by HyperHawks Team</p>
-          </div>
-        </div>
-      </footer>
+      {/* Floating Logs Viewer */}
+      <LogsViewer logs={strategyLogs} />
     </div>
   )
 }
