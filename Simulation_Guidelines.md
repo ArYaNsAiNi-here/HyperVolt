@@ -463,7 +463,7 @@ POST /api/predictions/retrain/
 ```bash
 GET /api/sensor-readings/latest/
 GET /api/energy-sources/available/
-GET /api/grid-data/current_carbon_intensity/
+GET /api/grid-data/carbon_intensity/
 GET /api/ai/forecast/?hours=6
 POST /api/ai/decide/
 PATCH /api/preferences/{key}/

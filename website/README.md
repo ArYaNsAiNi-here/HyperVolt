@@ -120,7 +120,7 @@ The website connects to the Django backend via REST API and WebSockets.
 - `GET /api/ai/forecast/?hours=6` - Get energy forecast
 - `GET /api/energy-sources/` - Get available energy sources
 - `GET /api/sensor-readings/` - Get sensor data
-- `GET /api/grid-data/current_carbon_intensity/` - Get carbon intensity
+- `GET /api/grid-data/carbon_intensity/` - Get carbon intensity
 - `PATCH /api/preferences/{key}/` - Update user preferences
 
 ### WebSocket

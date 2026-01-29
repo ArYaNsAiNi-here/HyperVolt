@@ -116,11 +116,11 @@ function EnergyPath({
   isActive: boolean
   color: string
 }) {
-  // Calculate path using percentages for responsive design
+  // Calculate path using coordinates that work with viewBox 0 0 100 100
   const midX = (from.x + to.x) / 2
   const midY = (from.y + to.y) / 2 - 5 // Slight curve
 
-  const pathD = `M ${from.x}% ${from.y}% Q ${midX}% ${midY}% ${to.x}% ${to.y}%`
+  const pathD = `M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`
 
   return (
     <>
@@ -217,8 +217,13 @@ export default function EnergyFlow({
 
   return (
     <div className={cn('relative w-full h-full bg-gray-900/50 rounded-lg p-8 overflow-hidden', className)}>
-      {/* Energy paths - using percentage-based positioning */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
+      {/* Energy paths - using viewBox for responsive SVG positioning */}
+      <svg 
+        className="absolute inset-0 w-full h-full pointer-events-none" 
+        style={{ zIndex: 0 }}
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+      >
         <EnergyPath
           from={positions.solar}
           to={positions.home}

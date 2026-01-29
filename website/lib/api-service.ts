@@ -11,19 +11,31 @@ class APIService {
 
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseURL}${endpoint}`
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    })
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options?.headers,
+        },
+      })
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`)
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.statusText}`)
+      }
+
+      return response.json()
+    } catch (error) {
+      // Check if this is a network/connection error (TypeError with fetch failure)
+      // Use console.warn for expected connection failures to reduce console noise when backend is unavailable
+      if (error instanceof TypeError) {
+        console.warn(`Backend unavailable: ${endpoint}`)
+      } else {
+        // Log non-network errors (like API errors) normally for debugging
+        console.error(`API request failed for ${endpoint}:`, error)
+      }
+      throw error
     }
-
-    return response.json()
   }
 
   // Sensor Readings
@@ -49,11 +61,11 @@ class APIService {
   }
 
   async getCurrentCarbonIntensity() {
-    return this.request<GridData>(`/api/grid-data/current_carbon_intensity/`)
+    return this.request<GridData>(`/api/grid-data/carbon_intensity/`)
   }
 
   async getCurrentWeather() {
-    return this.request<GridData>(`/api/grid-data/current_weather/`)
+    return this.request<GridData>(`/api/grid-data/weather/`)
   }
 
   // Energy Sources

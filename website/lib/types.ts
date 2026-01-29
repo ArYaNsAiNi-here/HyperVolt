@@ -1,7 +1,7 @@
 // API Response Types
 export interface SensorReading {
   id: number
-  sensor_type: 'ldr' | 'current' | 'temperature' | 'humidity'
+  sensor_type: 'ldr' | 'current' | 'temperature' | 'humidity' | 'voltage'
   sensor_id: string
   value: number
   unit: string
@@ -128,6 +128,7 @@ export interface DashboardState {
     current: number
     temperature: number
     humidity: number
+    voltage: number
   }
   energySources: {
     solar: { output: number; available: boolean }

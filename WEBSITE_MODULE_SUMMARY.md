@@ -272,8 +272,8 @@ GET  /api/sensor-readings/
 GET  /api/sensor-readings/latest/?sensor_type=ldr
 
 // Grid Data
-GET  /api/grid-data/current_carbon_intensity/
-GET  /api/grid-data/current_weather/
+GET  /api/grid-data/carbon_intensity/
+GET  /api/grid-data/weather/
 
 // User Preferences
 PATCH /api/preferences/{key}/

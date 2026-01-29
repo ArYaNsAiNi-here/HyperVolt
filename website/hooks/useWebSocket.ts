@@ -70,13 +70,16 @@ export function useWebSocket(url: string = `${WS_URL}/ws/sensors/`, options: Use
       }
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
+        // Use console.warn instead of console.error to reduce noise when backend is unavailable
+        // Still pass the error event to the callback for debugging if needed
+        console.warn('WebSocket connection error - backend may be unavailable:', error.type)
         onError?.(error)
       }
 
       wsRef.current = ws
     } catch (error) {
-      console.error('Failed to create WebSocket connection:', error)
+      // Use console.warn for connection failures - backend may not be running
+      console.warn('Failed to create WebSocket connection - backend may be unavailable:', error)
     }
   }, [url, onMessage, onOpen, onClose, onError, autoReconnect, reconnectInterval])
 

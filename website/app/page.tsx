@@ -17,6 +17,7 @@ import EfficiencyChart from '@/components/EfficiencyChart'
 import RealTimeMetrics from '@/components/RealTimeMetrics'
 import HeroSection from '@/components/HeroSection'
 import LogsViewer from '@/components/LogsViewer'
+import SensorMetrics from '@/components/SensorMetrics'
 
 // Constants
 const MAX_HISTORY_ENTRIES = 20
@@ -42,6 +43,8 @@ export default function Dashboard() {
   const [weatherCondition, setWeatherCondition] = useState('sunny')
   const [strategyLogs, setStrategyLogs] = useState<StrategyLogEntry[]>([])
   const [forecastData, setForecastData] = useState<ForecastPrediction[]>([])
+  const [temperature, setTemperature] = useState(25) // Temperature in Celsius
+  const [solarVoltage, setSolarVoltage] = useState(0) // Solar panel voltage
   const [stats, setStats] = useState({
     carbonSavings: 0,
     costSavings: 0,
@@ -87,6 +90,26 @@ export default function Dashboard() {
 
       if (sensor_type === 'current') {
         setEnergyOutputs(prev => ({ ...prev, home: value / 1000 })) // Convert to kW
+      }
+
+      if (sensor_type === 'temperature') {
+        setTemperature(value)
+        addLog({
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          type: 'info',
+          message: `Temperature updated: ${value.toFixed(1)}°C`,
+        })
+      }
+
+      if (sensor_type === 'voltage') {
+        setSolarVoltage(value)
+        addLog({
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          type: 'info',
+          message: `Solar voltage updated: ${value.toFixed(1)}V`,
+        })
       }
     }
 
@@ -211,7 +234,8 @@ export default function Dashboard() {
         }
 
       } catch (error) {
-        console.error('Failed to fetch initial data:', error)
+        // Use console.warn instead of console.error to reduce noise when backend is unavailable
+        console.warn('Failed to fetch initial data - backend may not be running')
         addLog({
           id: Date.now().toString(),
           timestamp: new Date().toISOString(),
@@ -374,6 +398,10 @@ export default function Dashboard() {
                 costRate={stats.costSavings * 60}
                 carbonRate={stats.carbonSavings * 1000 / 24}
                 efficiency={stats.efficiency}
+              />
+              <SensorMetrics
+                temperature={temperature}
+                solarVoltage={solarVoltage}
               />
             </div>
             

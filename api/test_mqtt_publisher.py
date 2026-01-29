@@ -91,6 +91,21 @@ class SensorSimulator:
             'timestamp': datetime.utcnow().isoformat() + 'Z'
         }
     
+    def simulate_voltage_reading(self):
+        """Simulate solar voltage sensor reading."""
+        # Simulate solar panel voltage (0-24V range, higher during daylight)
+        # Based on typical 12V or 24V solar panel systems
+        value = round(random.uniform(10.0, 22.0), 1)
+        
+        return {
+            'sensor_type': 'voltage',
+            'sensor_id': 'solar_voltage_1',
+            'value': value,
+            'unit': 'volts',
+            'location': 'solar_panel',
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
+        }
+    
     def publish_reading(self, reading):
         """Publish a sensor reading to MQTT."""
         topic = f"{self.topic_prefix}/{reading['location']}/{reading['sensor_type']}"
@@ -99,31 +114,37 @@ class SensorSimulator:
         self.client.publish(topic, payload)
         print(f"Published to {topic}: {reading['value']} {reading['unit']}")
     
-    def run_simulation(self, duration_seconds=60, interval_seconds=2):
+    def run_simulation(self, duration_seconds=60, interval_seconds=3):
         """Run the sensor simulation."""
         print(f"\nStarting sensor simulation for {duration_seconds} seconds")
         print(f"Publishing every {interval_seconds} seconds")
         print("Press Ctrl+C to stop\n")
         
         start_time = time.time()
+        sensor_publish_time = 0.3  # Time between each sensor publish
+        num_sensors = 5
         
         try:
             while time.time() - start_time < duration_seconds:
                 # Publish all sensor types
                 self.publish_reading(self.simulate_ldr_reading())
-                time.sleep(0.5)
+                time.sleep(sensor_publish_time)
                 
                 self.publish_reading(self.simulate_current_reading())
-                time.sleep(0.5)
+                time.sleep(sensor_publish_time)
                 
                 self.publish_reading(self.simulate_temperature_reading())
-                time.sleep(0.5)
+                time.sleep(sensor_publish_time)
                 
                 self.publish_reading(self.simulate_humidity_reading())
-                time.sleep(0.5)
+                time.sleep(sensor_publish_time)
                 
-                # Wait for next interval
-                time.sleep(interval_seconds - 2)
+                self.publish_reading(self.simulate_voltage_reading())
+                
+                # Wait for next interval (accounting for time spent publishing)
+                remaining_time = interval_seconds - (num_sensors * sensor_publish_time)
+                if remaining_time > 0:
+                    time.sleep(remaining_time)
                 
         except KeyboardInterrupt:
             print("\n\nSimulation stopped by user")
@@ -139,7 +160,7 @@ def main():
     BROKER_HOST = 'localhost'
     BROKER_PORT = 1883
     DURATION = 300  # 5 minutes
-    INTERVAL = 2    # Every 2 seconds
+    INTERVAL = 3    # Every 3 seconds
     
     # Create and run simulator
     simulator = SensorSimulator(BROKER_HOST, BROKER_PORT)
