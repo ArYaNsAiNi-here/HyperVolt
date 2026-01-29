@@ -65,7 +65,7 @@ class EnergyDemandForecaster:
             'total_energy_kwh',  # Target variable (also used as feature)
             'temperature',
             'humidity',
-            'solar_radiation_proxy',
+            'shortwave_radiation',
             'carbon_intensity',
             'grid_price_per_kwh',
             'hour',
@@ -344,28 +344,58 @@ class EnergyDemandForecaster:
         print(f"✓ Scalers saved to: {self.scaler_path}")
         print(f"✓ Config saved to: {self.config_path}")
     
-    def load_model(self) -> bool:
-        """Load saved model, scalers, and configuration"""
+    def load_model(self, model_path: str = None) -> bool:
+        """
+        Load saved model, scalers, and configuration
+
+        Args:
+            model_path: Optional path to model file. If provided, will derive paths for scalers and config.
+                       If not provided, uses default paths (models/demand_forecaster.h5)
+        """
         try:
-            # Load model
-            self.model = load_model(self.model_path)
-            
+            # Use provided path or default
+            if model_path:
+                # Derive other paths from the provided model path
+                model_dir = os.path.dirname(model_path)
+                base_name = os.path.splitext(os.path.basename(model_path))[0]
+
+                actual_model_path = model_path
+                actual_scaler_path = os.path.join(model_dir, f'{base_name}_scalers.pkl')
+                actual_config_path = os.path.join(model_dir, f'{base_name}_config.json')
+            else:
+                actual_model_path = self.model_path
+                actual_scaler_path = self.scaler_path
+                actual_config_path = self.config_path
+
+            # Load model without compiling to avoid Keras version issues
+            # Then recompile with current Keras API
+            self.model = load_model(actual_model_path, compile=False)
+
+            # Recompile with current Keras API
+            self.model.compile(
+                optimizer=keras.optimizers.Adam(learning_rate=0.001),
+                loss='mse',
+                metrics=['mae']
+            )
+
             # Load scalers
-            scalers = joblib.load(self.scaler_path)
+            scalers = joblib.load(actual_scaler_path)
             self.scaler_X = scalers['scaler_X']
             self.scaler_y = scalers['scaler_y']
             
             # Load configuration
-            with open(self.config_path, 'r') as f:
+            with open(actual_config_path, 'r') as f:
                 config = json.load(f)
             self.lookback_hours = config['lookback_hours']
             self.forecast_horizon = config['forecast_horizon']
             self.feature_columns = config['feature_columns']
             
-            print(f"✓ Model loaded from: {self.model_path}")
+            print(f"✓ Model loaded from: {actual_model_path}")
             return True
         except Exception as e:
             print(f"✗ Failed to load model: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
 

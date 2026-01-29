@@ -5,7 +5,6 @@
     "total_energy_kwh",
     "temperature",
     "humidity",
-    "shortwave_radiation",
     "carbon_intensity",
     "grid_price_per_kwh",
     "hour",
@@ -14,5 +13,5 @@
     "is_peak_hour",
     "occupancy_factor"
   ],
-  "trained_date": "2026-01-26T09:50:51.657495"
+  "trained_date": "2026-01-28T23:24:24.793603"
 }

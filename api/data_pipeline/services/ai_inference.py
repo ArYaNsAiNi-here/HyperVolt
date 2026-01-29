@@ -67,29 +67,32 @@ class AIInferenceService:
                 forecast_horizon=6
             )
 
-            # --- FIX STARTS HERE ---
-            # 1. Construct the absolute path to the 'ai/models' directory
+            # Construct the absolute path to the 'ai/models' directory
             # settings.BASE_DIR is '.../HyperVolt/api'
             # We go up one level (..) then into 'ai/models'
             ai_models_dir = os.path.join(settings.BASE_DIR, '..', 'ai', 'models')
             ai_models_dir = os.path.abspath(ai_models_dir)  # Resolve '..' to make it clean
 
-            # 2. Define the specific model file path
+            # Define the specific model file path
             model_path = os.path.join(ai_models_dir, 'demand_forecaster.h5')
 
             if os.path.exists(model_path):
                 print(f"Loading AI model from: {model_path}")
-                # Pass the explicit path to the loader
-                self.forecaster.load_model(model_path)
-                self.models_loaded = True
+                # Pass the explicit path to the loader and check if it succeeded
+                model_loaded = self.forecaster.load_model(model_path)
+                if model_loaded:
+                    print("✓ Demand forecaster model loaded successfully")
+                else:
+                    print("✗ Failed to load demand forecaster model")
+                    self.models_loaded = False
+                    return
             else:
                 print(f"Warning: Model file not found at {model_path}")
+                print(f"Please train models with: cd ai/module3-ai && python train_demand_model.py")
                 self.models_loaded = False
-            # --- FIX ENDS HERE ---
+                return
 
             # Initialize optimizer
-            # Note: You might need to do similar path fixing inside SourceOptimizer
-            # if it fails to load 'solar_dust_random_forest.pkl'
             self.optimizer = SourceOptimizer(
                 carbon_weight=0.5,
                 cost_weight=0.5,
@@ -98,10 +101,14 @@ class AIInferenceService:
                 battery_max_discharge=2.0
             )
 
+            # If we got here, both models are ready
+            self.models_loaded = True
             print("✓ AI models initialized successfully")
 
         except Exception as e:
             print(f"Warning: Could not initialize AI models: {e}")
+            import traceback
+            traceback.print_exc()
             self.models_loaded = False
     
     def is_available(self) -> bool:
@@ -426,8 +433,8 @@ class AIInferenceService:
             
             # Pivot and structure for training
             df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df['hour_key'] = df['timestamp'].dt.floor('H')
-            
+            df['hour_key'] = df['timestamp'].dt.floor('h')  # lowercase 'h' for newer pandas
+
             df_pivot = df.pivot_table(
                 index='hour_key',
                 columns='sensor_type',
@@ -474,8 +481,8 @@ class AIInferenceService:
             
             # Convert timestamp to hour (to group by hour)
             df_raw['timestamp'] = pd.to_datetime(df_raw['timestamp'])
-            df_raw['hour_key'] = df_raw['timestamp'].dt.floor('H')  # Group by Hour
-            
+            df_raw['hour_key'] = df_raw['timestamp'].dt.floor('h')  # Group by Hour (lowercase 'h' for newer pandas)
+
             # Pivot table: Rows=Time, Columns=SensorTypes
             # We take the mean value if there are multiple readings per hour
             df_pivot = df_raw.pivot_table(
@@ -491,13 +498,17 @@ class AIInferenceService:
             column_map = {
                 'temperature': 'temperature',
                 'humidity': 'humidity',
-                'ldr': 'solar_radiation_proxy',  # LDR maps to solar proxy
+                'ldr': 'shortwave_radiation',  # LDR maps to shortwave radiation (W/m²)
                 'current': 'total_energy_kwh'    # Approximating energy from current
             }
             df_pivot.rename(columns=column_map, inplace=True)
             
+            # Scale LDR reading (0-1023 raw) to shortwave radiation (0-1000 W/m²)
+            if 'shortwave_radiation' in df_pivot.columns:
+                df_pivot['shortwave_radiation'] = (df_pivot['shortwave_radiation'] / 1023.0) * 1000.0
+
             # Fill missing columns with defaults if a sensor is broken/missing
-            required_cols = ['temperature', 'total_energy_kwh', 'solar_radiation_proxy']
+            required_cols = ['temperature', 'total_energy_kwh', 'shortwave_radiation']
             for col in required_cols:
                 if col not in df_pivot.columns:
                     df_pivot[col] = 0.0  # Or reasonable default
@@ -507,11 +518,27 @@ class AIInferenceService:
             df_pivot['day_of_week'] = df_pivot['hour_key'].dt.dayofweek
             df_pivot['is_weekend'] = df_pivot['day_of_week'] >= 5
             
+            # Add is_peak_hour feature (8-11 AM and 6-10 PM are peak hours in India)
+            df_pivot['is_peak_hour'] = df_pivot['hour'].apply(
+                lambda h: 1 if (8 <= h <= 11) or (18 <= h <= 22) else 0
+            )
+
+            # Add occupancy_factor (estimate based on time of day)
+            def estimate_occupancy(hour):
+                if 22 <= hour or hour <= 6:  # Night
+                    return 0.9  # High occupancy (sleeping)
+                elif 9 <= hour <= 17:  # Work hours
+                    return 0.3  # Low occupancy (people at work)
+                else:  # Morning/Evening
+                    return 0.7  # Medium occupancy
+
+            df_pivot['occupancy_factor'] = df_pivot['hour'].apply(estimate_occupancy)
+
             # Hardcoded external factors (unless you store Weather/Carbon history)
             # ideally, these should also come from a GridData history query
             df_pivot['cloud_cover'] = 30.0 
             df_pivot['carbon_intensity'] = 450.0
-            df_pivot['grid_price'] = 6.0
+            df_pivot['grid_price_per_kwh'] = 6.0  # Match exact feature name
 
             # Sort and return last 24 rows
             df_final = df_pivot.sort_values('hour_key').tail(24)

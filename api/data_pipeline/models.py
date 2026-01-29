@@ -12,6 +12,7 @@ class SensorReading(models.Model):
         ('current', 'Current Sensor'),
         ('temperature', 'Temperature Sensor'),
         ('humidity', 'Humidity Sensor'),
+        ('voltage', 'Voltage Sensor'),
     ]
 
     sensor_type = models.CharField(max_length=20, choices=SENSOR_TYPE_CHOICES, db_index=True)

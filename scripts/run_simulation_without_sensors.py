@@ -258,33 +258,77 @@ class SimulationRunner:
                 'unit': unit,
                 'location': location,
             }
+            url = f"{self.api_url}/api/sensor-readings/"
             response = requests.post(
-                f"{self.api_url}/api/sensor-readings/",
+                url,
                 json=data,
                 timeout=5
             )
+            if response.status_code not in [200, 201]:
+                print(f"  ⚠ API Error [{sensor_type}]: Status {response.status_code}")
+                print(f"     URL: {url}")
+                try:
+                    print(f"     Response: {response.text[:200]}")
+                except:
+                    pass
             return response.status_code in [200, 201]
-        except requests.exceptions.RequestException:
+        except requests.exceptions.ConnectionError as e:
+            print(f"  ❌ Connection Error: Cannot reach {self.api_url}")
+            print(f"     Make sure Django is running!")
+            return False
+        except requests.exceptions.Timeout:
+            print(f"  ⚠ Timeout: API took too long to respond")
+            return False
+        except requests.exceptions.RequestException as e:
+            print(f"  ❌ Request Error: {e}")
             return False
     
     def trigger_ai_decision(self) -> Dict:
         """Trigger the AI to make an energy management decision."""
         try:
+            url = f"{self.api_url}/api/ai/decide/"
+            print(f"\n🔍 [DEBUG] Calling AI decision endpoint: {url}")
+
             response = requests.post(
-                f"{self.api_url}/api/predictions/decide/",
+                url,
                 timeout=10
             )
+
+            print(f"🔍 [DEBUG] Response status: {response.status_code}")
+
             if response.status_code == 200:
-                return response.json()
+                decision = response.json()
+                print(f"🔍 [DEBUG] Decision received: {json.dumps(decision, indent=2)}")
+                print(f"🔍 [DEBUG] Available flag: {decision.get('available')}")
+
+                if not decision.get('available'):
+                    print(f"❌ [DEBUG] Decision not available! Error: {decision.get('error', 'Unknown')}")
+                else:
+                    print(f"✅ [DEBUG] Valid AI decision received!")
+
+                return decision
+            else:
+                print(f"  ⚠ AI Decision Error: Status {response.status_code}")
+                try:
+                    print(f"     Response: {response.text[:200]}")
+                except:
+                    pass
             return None
-        except requests.exceptions.RequestException:
+        except requests.exceptions.ConnectionError:
+            # Don't print every time - already warned about connection
+            return None
+        except requests.exceptions.Timeout:
+            print(f"  ⚠ AI Decision Timeout")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"  ❌ AI Decision Error: {e}")
             return None
     
     def get_ai_forecast(self, hours: int = 6) -> Dict:
         """Get AI energy demand forecast."""
         try:
             response = requests.get(
-                f"{self.api_url}/api/predictions/forecast/?hours={hours}",
+                f"{self.api_url}/api/ai/forecast/?hours={hours}",
                 timeout=10
             )
             if response.status_code == 200:
@@ -322,17 +366,42 @@ class SimulationRunner:
         
         # Trigger AI decision if enabled
         decision = None
-        if ENABLE_AI_DECISIONS and self.stats['total_iterations'] % 6 == 0:  # Every 30 seconds
+        iteration_num = self.stats['total_iterations']
+
+        print(f"\n🔍 [DEBUG] Iteration {iteration_num}: Checking AI decision trigger...")
+        print(f"🔍 [DEBUG] ENABLE_AI_DECISIONS: {ENABLE_AI_DECISIONS}")
+        print(f"🔍 [DEBUG] iteration_num % 6: {iteration_num % 6}")
+
+        if ENABLE_AI_DECISIONS and iteration_num % 6 == 0:  # Every 30 seconds
+            print(f"✅ [DEBUG] Triggering AI decision at iteration {iteration_num}...")
             decision = self.trigger_ai_decision()
-            if decision and decision.get('available'):
-                self.stats['ai_decisions_made'] += 1
-                self.decision_history.append(decision)
-                
-                # Update stats
-                current_decision = decision.get('current_decision', {})
-                self.stats['total_cost'] += current_decision.get('cost', 0)
-                self.stats['total_carbon'] += current_decision.get('carbon', 0)
-        
+
+            if decision:
+                print(f"🔍 [DEBUG] Decision object received: {decision is not None}")
+                available = decision.get('available')
+                print(f"🔍 [DEBUG] Available flag: {available}")
+
+                if available:
+                    print(f"✅ [DEBUG] Incrementing AI decisions count!")
+                    self.stats['ai_decisions_made'] += 1
+                    self.decision_history.append(decision)
+
+                    # Update stats
+                    current_decision = decision.get('current_decision', {})
+                    self.stats['total_cost'] += current_decision.get('cost', 0)
+                    self.stats['total_carbon'] += current_decision.get('carbon', 0)
+                    print(f"✅ [DEBUG] AI Decisions: {self.stats['ai_decisions_made']}")
+                else:
+                    print(f"❌ [DEBUG] Decision available=False, not counting!")
+                    print(f"❌ [DEBUG] Error in decision: {decision.get('error', 'Unknown')}")
+            else:
+                print(f"❌ [DEBUG] No decision object returned (None)")
+        else:
+            if not ENABLE_AI_DECISIONS:
+                print(f"⚠️ [DEBUG] AI decisions disabled")
+            else:
+                print(f"⏭️ [DEBUG] Skipping - not a trigger iteration")
+
         self.stats['total_iterations'] += 1
         
         return {

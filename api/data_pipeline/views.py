@@ -4,6 +4,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from .models import SensorReading, GridData, UserPreferences, AIDecision, EnergySource, Load, SourceSwitchEvent
 from .serializers import (
@@ -29,6 +31,32 @@ class SensorReadingViewSet(viewsets.ModelViewSet):
     serializer_class = SensorReadingSerializer
     filterset_fields = ['sensor_type', 'sensor_id', 'location']
     ordering_fields = ['timestamp', 'created_at']
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new sensor reading and broadcast to WebSocket clients.
+        """
+        # Create the sensor reading using the parent class method
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        # Broadcast to WebSocket clients
+        try:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                'sensor_updates',
+                {
+                    'type': 'sensor_update',
+                    'data': serializer.data
+                }
+            )
+        except Exception as e:
+            # Log but don't fail if WebSocket broadcast fails
+            print(f"Warning: Could not broadcast to WebSocket: {e}")
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=False, methods=['get'])
     def latest(self, request):
@@ -619,10 +647,19 @@ class AIPredictionViewSet(viewsets.ViewSet):
             "available": true
         }
         """
+        print("🔍 [DEBUG] AI decide endpoint called")
+
         result = self.ai_service.make_decision()
         
+        print(f"🔍 [DEBUG] AI decision result: {result}")
+        print(f"🔍 [DEBUG] Available flag: {result.get('available')}")
+
+        if result.get('error'):
+            print(f"❌ [DEBUG] AI returned error: {result.get('error')}")
+
         # Record the decision
         if result.get('available'):
+            print("✅ [DEBUG] Decision is available, recording to database")
             try:
                 AIDecision.objects.create(
                     decision_type='general',
@@ -632,9 +669,12 @@ class AIPredictionViewSet(viewsets.ViewSet):
                     applied=False,
                     reasoning=result.get('recommendation', '')
                 )
+                print("✅ [DEBUG] Decision recorded successfully")
             except Exception as e:
-                print(f"Warning: Could not record decision: {e}")
-        
+                print(f"⚠️ [DEBUG] Could not record decision: {e}")
+        else:
+            print("❌ [DEBUG] Decision not available - will not be counted")
+
         return Response(result)
     
     @action(detail=False, methods=['post'])

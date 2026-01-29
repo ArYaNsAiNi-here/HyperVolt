@@ -130,7 +130,7 @@ class MasterDataCollector:
         
         df = pd.merge(
             df, 
-            weather_df[['timestamp', 'temperature', 'humidity', 'cloud_cover', 'wind_speed', 'solar_radiation_proxy']],
+            weather_df[['timestamp', 'temperature', 'humidity', 'cloud_cover', 'wind_speed', 'shortwave_radiation']],
             on='timestamp',
             how='left',
             suffixes=('', '_weather')
@@ -207,7 +207,7 @@ class MasterDataCollector:
         print("\n🌡️  Environmental Stats:")
         print(f"  Avg Temperature:       {integrated_df['temperature'].mean():.1f}°C")
         print(f"  Avg Humidity:          {integrated_df['humidity'].mean():.1f}%")
-        print(f"  Avg Solar Radiation:   {integrated_df['solar_radiation_proxy'].mean():.2f}")
+        print(f"  Avg Solar Radiation:   {integrated_df['shortwave_radiation'].mean():.2f} W/m²")
         print(f"  Avg Renewable %:       {integrated_df['renewable_percentage'].mean():.1f}%")
         
         print("\n" + "=" * 70)
