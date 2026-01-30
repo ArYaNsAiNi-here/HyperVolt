@@ -77,7 +77,10 @@ function GeometricHouse({
 // --- 2. The Real GLTF Model ---
 function GLTFModel({ onLoad }: { onLoad: () => void }) {
   // This will SUSPEND if loading, or THROW if failed
-  const gltf = useGLTF('/models/sus_room.gltf')
+    // during day
+  const gltf = useGLTF('/models/tiny_isometric_room.glb')
+    // during night
+    // const gltf = useGLTF('/models/isometric_room_school.glb')
 
   // Report success once loaded
   useEffect(() => {
