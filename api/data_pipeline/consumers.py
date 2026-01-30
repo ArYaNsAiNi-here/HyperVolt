@@ -61,9 +61,20 @@ class SensorConsumer(AsyncWebsocketConsumer):
         """
         Called when a sensor_update message is broadcast to the group.
         Forwards the update to the WebSocket client.
+        
+        Handles:
+        - Regular sensor data from MQTT listener
+        - AI decisions from AIInferenceService
+        - Source switch events
         """
-        # Send the sensor data to the WebSocket
+        data = event.get('data', {})
+        
+        # Determine message type from data content
+        # AI decisions and source switches include a 'type' field
+        message_type = data.pop('type', 'sensor_update') if isinstance(data, dict) else 'sensor_update'
+        
+        # Send the data to the WebSocket
         await self.send(text_data=json.dumps({
-            'type': 'sensor_update',
-            'data': event['data']
+            'type': message_type,
+            'data': data
         }))
