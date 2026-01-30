@@ -33,7 +33,7 @@ export default function HeroSection({
 }: HeroSectionProps) {
   return (
     // CHANGE 1: Use h-[100dvh] instead of h-screen to account for mobile browser bars
-    <section className="relative w-full h-[100dvh]">
+    <section className="relative w-full h-dvh">
       {/* Full viewport 3D model */}
       <div className="absolute inset-0 w-full h-full">
         <DigitalTwin
@@ -100,7 +100,7 @@ export default function HeroSection({
       </div>
 
       {/* Gradient overlay for better text visibility */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/30 pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-b from-black/30 via-transparent to-black/30 pointer-events-none" />
     </section>
   )
 }
