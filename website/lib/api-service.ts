@@ -61,11 +61,11 @@ class APIService {
   }
 
   async getCurrentCarbonIntensity() {
-    return this.request<GridData>(`/api/grid-data/carbon_intensity/`)
+    return this.request<GridData[]>(`/api/grid-data/carbon_intensity/`)
   }
 
   async getCurrentWeather() {
-    return this.request<GridData>(`/api/grid-data/weather/`)
+    return this.request<GridData[]>(`/api/grid-data/weather/`)
   }
 
   // Energy Sources
@@ -83,7 +83,7 @@ class APIService {
   }
 
   async getCriticalLoads() {
-    return this.request<Load[]>(`/api/loads/critical/`)
+    return this.request<Load[]>(`/api/loads/high_priority/`)
   }
 
   // Switch Events
