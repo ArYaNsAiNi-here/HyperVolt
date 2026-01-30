@@ -68,14 +68,20 @@ class AIInferenceService:
             # Define specific file paths
             model_path = os.path.join(ai_models_dir, 'demand_forecaster.h5')
             scaler_path = os.path.join(ai_models_dir, 'demand_forecaster_scalers.pkl')
+            config_path = os.path.join(ai_models_dir, 'demand_forecaster_config.json')
 
             # Initialize Forecaster
             self.forecaster = EnergyDemandForecaster(lookback_hours=24, forecast_horizon=6)
+            
+            # Update the forecaster's paths to point to the correct location
+            self.forecaster.model_path = model_path
+            self.forecaster.scaler_path = scaler_path
+            self.forecaster.config_path = config_path
 
             if os.path.exists(model_path) and os.path.exists(scaler_path):
                 print(f"Loading AI model from: {model_path}")
-                self.forecaster.load_model(model_path)  # Ensure load_model accepts path arg
-                self.models_loaded = True
+                # load_model() uses the instance's path attributes, not arguments
+                self.models_loaded = self.forecaster.load_model()
             else:
                 print(f"Warning: Model files not found in {ai_models_dir}")
                 print("Please run 'python ai/module3-ai/train_demand_model.py' first.")

@@ -62,8 +62,16 @@ class SensorConsumer(AsyncWebsocketConsumer):
         Called when a sensor_update message is broadcast to the group.
         Forwards the update to the WebSocket client.
         """
-        # Send the sensor data to the WebSocket
-        await self.send(text_data=json.dumps({
-            'type': 'sensor_update',
-            'data': event['data']
-        }))
+        try:
+            # Send the sensor data to the WebSocket
+            await self.send(text_data=json.dumps({
+                'type': 'sensor_update',
+                'data': event['data']
+            }))
+        except Exception as e:
+            # Handle disconnected clients gracefully
+            error_msg = str(e).lower()
+            if 'closed' in error_msg or 'disconnect' in error_msg:
+                logger.debug(f"Client {self.channel_name} disconnected during send")
+            else:
+                logger.warning(f"Failed to send to client {self.channel_name}: {e}")
