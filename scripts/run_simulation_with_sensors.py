@@ -190,6 +190,41 @@ class MQTTSensorListener:
         print(f"  ⚠ Disconnected from MQTT broker (code: {rc})")
         self.connected = False
     
+    def _parse_payload(self, payload_bytes):
+        """
+        Parse MQTT payload with support for multiple formats.
+        
+        Handles:
+        - Standard JSON with double quotes
+        - Python dict strings with single quotes (from ESP32)
+        - Plain numeric values
+        """
+        payload_str = payload_bytes.decode()
+        
+        # Try standard JSON first
+        try:
+            return json.loads(payload_str)
+        except json.JSONDecodeError:
+            pass
+        
+        # Try parsing as Python literal (handles single quotes safely)
+        try:
+            import ast
+            result = ast.literal_eval(payload_str)
+            if isinstance(result, dict):
+                return result
+        except (ValueError, SyntaxError):
+            pass
+        
+        # Try parsing as a simple numeric value
+        try:
+            return {'value': float(payload_str)}
+        except ValueError:
+            pass
+        
+        # Return the raw string as value if nothing else works
+        return {'value': payload_str, 'raw': True}
+    
     def on_message(self, client, userdata, msg):
         """Callback when a message is received.
         
@@ -203,11 +238,10 @@ class MQTTSensorListener:
             topic_parts = topic.split('/')
             
             # Parse payload first to get sensor details
-            try:
-                payload = json.loads(msg.payload.decode().replace("'", '"'))
-            except json.JSONDecodeError:
-                # Try parsing as simple value
-                payload = {'value': float(msg.payload.decode())}
+            payload = self._parse_payload(msg.payload)
+            
+            # Valid sensor types expected by the backend
+            VALID_SENSOR_TYPES = {'ldr', 'current', 'temperature', 'humidity', 'voltage'}
             
             # Determine sensor_type and location based on topic format
             sensor_type = None
@@ -226,6 +260,23 @@ class MQTTSensorListener:
             else:
                 sensor_type = payload.get('sensor_type', topic)
                 location = payload.get('location', 'unknown')
+            
+            # Validate and normalize sensor_type
+            if sensor_type not in VALID_SENSOR_TYPES:
+                # Try to map common variations
+                type_mapping = {
+                    'light': 'ldr',
+                    'solar': 'ldr',
+                    'amp': 'current',
+                    'amps': 'current',
+                    'temp': 'temperature',
+                    'hum': 'humidity',
+                    'volt': 'voltage',
+                    'volts': 'voltage',
+                }
+                sensor_type = type_mapping.get(sensor_type.lower(), sensor_type)
+                if sensor_type not in VALID_SENSOR_TYPES:
+                    print(f"  ⚠ Unknown sensor type '{sensor_type}' on topic {topic}, storing anyway")
             
             # Extract values from payload
             value = payload.get('value', 0)

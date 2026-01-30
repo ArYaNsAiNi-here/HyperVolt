@@ -72,8 +72,11 @@ memurai-server.exe
 
 ### Step 2: Start MQTT Broker (Mosquitto)
 ```powershell
-# Start Mosquitto broker
-mosquitto -v -c mosquitto.conf
+# Start Mosquitto broker (without config file for basic setup)
+mosquitto -v
+
+# Or with a config file if you have one:
+# mosquitto -v -c path/to/mosquitto.conf
 ```
 
 ### Step 3: Start Module 2 - Backend API
