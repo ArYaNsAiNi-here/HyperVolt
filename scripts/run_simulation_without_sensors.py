@@ -271,7 +271,7 @@ class SimulationRunner:
         """Trigger the AI to make an energy management decision."""
         try:
             response = requests.post(
-                f"{self.api_url}/api/predictions/decide/",
+                f"{self.api_url}/api/ai/decide/",
                 timeout=10
             )
             if response.status_code == 200:
@@ -284,7 +284,7 @@ class SimulationRunner:
         """Get AI energy demand forecast."""
         try:
             response = requests.get(
-                f"{self.api_url}/api/predictions/forecast/?hours={hours}",
+                f"{self.api_url}/api/ai/forecast/?hours={hours}",
                 timeout=10
             )
             if response.status_code == 200:

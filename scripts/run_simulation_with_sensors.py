@@ -317,7 +317,7 @@ class RealSensorSimulationRunner:
         """Trigger the AI to make an energy management decision."""
         try:
             response = requests.post(
-                f"{self.api_url}/api/predictions/decide/",
+                f"{self.api_url}/api/ai/decide/",
                 timeout=10
             )
             if response.status_code == 200:

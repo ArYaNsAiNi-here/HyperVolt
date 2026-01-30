@@ -340,12 +340,16 @@ class AIInferenceService:
             # 2. NEW: WebSocket Broadcast (To Frontend)
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
-                "sensors",  # Broadcast to the 'sensors' group (dashboard listeners)
+                "sensor_updates",  # Broadcast to the 'sensor_updates' group (same as mqtt_listener.py)
                 {
-                    "type": "sensor.update",  # Re-using existing handler in consumers.py
+                    "type": "sensor_update",  # Must match handler method name in consumers.py
                     "data": {
                         "type": "ai_decision",
-                        "payload": payload
+                        "reasoning": decision_data.get('recommendation', ''),
+                        "source_allocation": decision_data.get('source_allocation', []),
+                        "to_source": primary_source,
+                        "reason": f"AI optimization: {primary_source} selected",
+                        "timestamp": timezone.now().isoformat()
                     }
                 }
             )
