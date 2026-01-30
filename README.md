@@ -257,12 +257,12 @@ The AI will automatically fetch and apply these weights before each optimization
 
 #### Forecast Energy Demand
 ```bash
-GET /api/predictions/forecast/?hours=6
+GET /api/ai/forecast/?hours=6
 ```
 
 #### Get Source Recommendation
 ```bash
-POST /api/predictions/recommend_source/
+POST /api/ai/recommend_source/
 {
     "load_name": "HVAC Living Room",
     "load_priority": 75,
@@ -272,7 +272,7 @@ POST /api/predictions/recommend_source/
 
 #### Make Comprehensive Decision
 ```bash
-POST /api/predictions/decide/
+POST /api/ai/decide/
 ```
 
 This endpoint:
@@ -282,7 +282,7 @@ This endpoint:
 
 #### Retrain AI Model
 ```bash
-POST /api/predictions/retrain/
+POST /api/ai/retrain/
 ```
 
 Exports recent data from database, retrains the model, and reloads it into memory.
@@ -314,14 +314,14 @@ Your hardware (ESP32/Raspberry Pi) should subscribe to this topic and execute th
 
 1. **Check AI Status:**
 ```bash
-GET /api/predictions/status/
+GET /api/ai/status/
 ```
 
 2. **Test with Simulation Data:**
 ```bash
 # Edit api/data/simulation_sensors.csv
 # Change ldr to 4000 (daytime)
-GET /api/predictions/forecast/
+GET /api/ai/forecast/
 
 # Expected: Recommends solar power
 ```
@@ -329,7 +329,7 @@ GET /api/predictions/forecast/
 3. **Test Night Scenario:**
 ```bash
 # Change ldr to 100 (nighttime)
-GET /api/predictions/forecast/
+GET /api/ai/forecast/
 
 # Expected: Recommends grid/battery
 ```

@@ -141,6 +141,12 @@ class Command(BaseCommand):
             unit = payload.get('unit', 'raw')
             location = payload.get('location', '')
             timestamp = payload.get('timestamp')
+            
+            # Normalize sensor_type: ESP32 sends "light" but AI expects "ldr"
+            sensor_type_mapping = {
+                'light': 'ldr',  # LDR light sensor
+            }
+            sensor_type = sensor_type_mapping.get(sensor_type, sensor_type)
 
             # Parse timestamp with fallback for time-only format
             if timestamp:

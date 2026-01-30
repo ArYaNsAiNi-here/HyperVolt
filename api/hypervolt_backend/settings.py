@@ -165,6 +165,8 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
             "hosts": [(REDIS_HOST, REDIS_PORT)],
+            "capacity": 1500,  # Max messages per group
+            "expiry": 10,  # Message expiry time in seconds
         },
     },
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { WebSocketMessage } from '@/lib/types'
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'
+const MAX_RECONNECT_ATTEMPTS = 10
 
 interface UseWebSocketOptions {
   onMessage?: (message: WebSocketMessage) => void
@@ -29,9 +30,12 @@ export function useWebSocket(url: string = `${WS_URL}/ws/sensors/`, options: Use
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const shouldReconnectRef = useRef(true)
+  const reconnectAttemptsRef = useRef(0)
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Prevent multiple connections - check for OPEN or CONNECTING states
+    if (wsRef.current?.readyState === WebSocket.OPEN || 
+        wsRef.current?.readyState === WebSocket.CONNECTING) {
       return
     }
 
@@ -41,6 +45,7 @@ export function useWebSocket(url: string = `${WS_URL}/ws/sensors/`, options: Use
       ws.onopen = () => {
         console.log('WebSocket connected')
         setIsConnected(true)
+        reconnectAttemptsRef.current = 0 // Reset on successful connection
         onOpen?.()
       }
 
@@ -60,12 +65,17 @@ export function useWebSocket(url: string = `${WS_URL}/ws/sensors/`, options: Use
         wsRef.current = null
         onClose?.()
 
-        // Auto-reconnect if enabled
-        if (autoReconnect && shouldReconnectRef.current) {
+        // Auto-reconnect if enabled and under max attempts
+        if (autoReconnect && shouldReconnectRef.current && 
+            reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttemptsRef.current += 1
+          const backoffInterval = reconnectInterval * Math.min(reconnectAttemptsRef.current, 5)
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('Attempting to reconnect...')
+            console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`)
             connect()
-          }, reconnectInterval)
+          }, backoffInterval)
+        } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          console.warn('Max reconnection attempts reached. Please check if the backend is running.')
         }
       }
 
@@ -85,6 +95,7 @@ export function useWebSocket(url: string = `${WS_URL}/ws/sensors/`, options: Use
 
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false
+    reconnectAttemptsRef.current = 0
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
     }
@@ -103,8 +114,15 @@ export function useWebSocket(url: string = `${WS_URL}/ws/sensors/`, options: Use
     }
   }, [])
 
+  // Reset reconnect attempts when manually reconnecting
+  const reconnect = useCallback(() => {
+    reconnectAttemptsRef.current = 0
+    connect()
+  }, [connect])
+
   useEffect(() => {
     shouldReconnectRef.current = true
+    reconnectAttemptsRef.current = 0
     connect()
 
     return () => {
@@ -117,6 +135,6 @@ export function useWebSocket(url: string = `${WS_URL}/ws/sensors/`, options: Use
     lastMessage,
     sendMessage,
     disconnect,
-    reconnect: connect,
+    reconnect,
   }
 }
