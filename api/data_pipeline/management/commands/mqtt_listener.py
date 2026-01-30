@@ -129,7 +129,7 @@ class Command(BaseCommand):
             )
 
             # Validate required fields
-            required_fields = ['sensor_type', 'sensor_id', 'value','unit','location','timestamp']
+            required_fields = ['sensor_type', 'sensor_id', 'value', 'unit', 'location', 'timestamp']
             if not all(field in payload for field in required_fields):
                 logger.warning(f'Invalid message format: {payload}')
                 return
