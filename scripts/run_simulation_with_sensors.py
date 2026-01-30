@@ -166,10 +166,21 @@ class MQTTSensorListener:
             print(f"  ✅ Connected to MQTT broker at {self.broker_host}:{self.broker_port}")
             self.connected = True
             
-            # Subscribe to sensor topics
-            topic = f"{MQTT_TOPIC_PREFIX}/#"
-            client.subscribe(topic)
-            print(f"  📡 Subscribed to: {topic}")
+            # Subscribe to multiple topic patterns to support different formats
+            # Pattern 1: HyperVolt/sensors/# (original format)
+            topic1 = f"{MQTT_TOPIC_PREFIX}/#"
+            client.subscribe(topic1)
+            print(f"  📡 Subscribed to: {topic1}")
+            
+            # Pattern 2: +/data (ESP32 format like solar/data, battery/data)
+            topic2 = "+/data"
+            client.subscribe(topic2)
+            print(f"  📡 Subscribed to: {topic2}")
+            
+            # Pattern 3: HyperVolt/commands/# (for control commands)
+            topic3 = "HyperVolt/commands/#"
+            client.subscribe(topic3)
+            print(f"  📡 Subscribed to: {topic3}")
         else:
             print(f"  ❌ Failed to connect to MQTT broker (code: {rc})")
             self.connected = False
@@ -180,25 +191,43 @@ class MQTTSensorListener:
         self.connected = False
     
     def on_message(self, client, userdata, msg):
-        """Callback when a message is received."""
+        """Callback when a message is received.
+        
+        Supports multiple topic formats:
+        1. HyperVolt/sensors/{location}/{sensor_type} - Full format
+        2. solar/data, battery/data, etc. - ESP32 simple format
+        3. Any other topic with payload containing sensor_type
+        """
         try:
-            # Parse topic: HyperVolt/sensors/{location}/{sensor_type}
-            topic_parts = msg.topic.split('/')
-            if len(topic_parts) >= 4:
-                location = topic_parts[2]
-                sensor_type = topic_parts[3]
-            else:
-                print(f"  ⚠ Invalid topic format: {msg.topic}")
-                return
+            topic = msg.topic
+            topic_parts = topic.split('/')
             
-            # Parse payload
+            # Parse payload first to get sensor details
             try:
-                payload = json.loads(msg.payload.decode())
+                payload = json.loads(msg.payload.decode().replace("'", '"'))
             except json.JSONDecodeError:
                 # Try parsing as simple value
                 payload = {'value': float(msg.payload.decode())}
             
-            # Extract values
+            # Determine sensor_type and location based on topic format
+            sensor_type = None
+            location = None
+            
+            # Format 1: HyperVolt/sensors/{location}/{sensor_type}
+            if len(topic_parts) >= 4 and topic_parts[0].lower() == 'hypervolt':
+                location = topic_parts[2]
+                sensor_type = topic_parts[3]
+            # Format 2: {source}/data (ESP32 format like solar/data, battery/data)
+            elif len(topic_parts) == 2 and topic_parts[1] == 'data':
+                # Extract from payload if available
+                sensor_type = payload.get('sensor_type', topic_parts[0])
+                location = payload.get('location', topic_parts[0])
+            # Format 3: Single segment or unknown - use payload data
+            else:
+                sensor_type = payload.get('sensor_type', topic)
+                location = payload.get('location', 'unknown')
+            
+            # Extract values from payload
             value = payload.get('value', 0)
             sensor_id = payload.get('sensor_id', f'{sensor_type}_1')
             unit = payload.get('unit', 'unit')
@@ -317,7 +346,7 @@ class RealSensorSimulationRunner:
         """Trigger the AI to make an energy management decision."""
         try:
             response = requests.post(
-                f"{self.api_url}/api/predictions/decide/",
+                f"{self.api_url}/api/ai/decide/",
                 timeout=10
             )
             if response.status_code == 200:

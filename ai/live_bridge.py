@@ -2,17 +2,21 @@ import requests
 import pandas as pd
 import sys
 import os
+from datetime import datetime
 
-sys.path.append(os.path.join(os.getcwd(), 'engine', 'ai'))
+# Correctly add the module3-ai directory to the path
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, 'module3-ai'))
 from optimize_sources import SourceOptimizer, EnergySource
 
-# CONFIGURATION
-MAC_IP = "192.168.1.5"  # <--- REPLACE THIS WITH YOUR MAC'S IP
-API_URL = f"http://{MAC_IP}:8000/api"
+# CONFIGURATION - Set to localhost for local development
+API_HOST = os.environ.get('HYPERVOLT_API_HOST', 'localhost')
+API_PORT = os.environ.get('HYPERVOLT_API_PORT', '8000')
+API_URL = f"http://{API_HOST}:{API_PORT}/api"
 
 
 def get_live_data():
-    """Fetch real-time data from the Mac Backend"""
+    """Fetch real-time data from the Backend API"""
     try:
         # 1. Get latest Grid Data (Carbon, Weather)
         grid_resp = requests.get(f"{API_URL}/grid-data/weather/?hours=24")
@@ -22,7 +26,7 @@ def get_live_data():
         sensor_resp = requests.get(f"{API_URL}/sensor-readings/latest/")
         sensor_data = sensor_resp.json()
 
-        print("✓ Connected to Mac Backend")
+        print(f"✓ Connected to Backend at {API_URL}")
         return grid_data, sensor_data
     except Exception as e:
         print(f"✗ Connection failed: {e}")
@@ -54,7 +58,7 @@ def run_optimization():
     conditions = {
         'solar_radiation': current_solar,
         'cloud_cover': 10,  # Example: Get from weather API
-        'hour': 14,  # Example: Get from datetime
+        'hour': datetime.now().hour,  # Get current hour from datetime
         'carbon_intensity': current_carbon,
         'grid_price': 12.0  # Standard rate
     }

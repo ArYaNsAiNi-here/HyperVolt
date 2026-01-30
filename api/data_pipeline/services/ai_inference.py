@@ -353,9 +353,9 @@ class AIInferenceService:
             # 2. NEW: WebSocket Broadcast (To Frontend)
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
-                "sensors",  # Broadcast to the 'sensors' group (dashboard listeners)
+                "sensor_updates",  # Broadcast to the 'sensor_updates' group (matches consumers.py)
                 {
-                    "type": "sensor.update",  # Re-using existing handler in consumers.py
+                    "type": "sensor_update",  # Matches the handler method name in SensorConsumer
                     "data": {
                         "type": "ai_decision",
                         "payload": payload
