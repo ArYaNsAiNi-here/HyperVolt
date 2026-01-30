@@ -3,7 +3,8 @@ import pandas as pd
 import sys
 import os
 
-sys.path.append(os.path.join(os.getcwd(), 'engine', 'ai'))
+# Add AI module to path - Updated path for project structure
+sys.path.append(os.path.join(os.path.dirname(__file__), 'module3-ai'))
 from optimize_sources import SourceOptimizer, EnergySource
 
 # CONFIGURATION
