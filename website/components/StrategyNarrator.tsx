@@ -20,6 +20,7 @@ function LogItem({ log }: { log: StrategyLogEntry }) {
     warning: <AlertCircle className="w-4 h-4" />,
     success: <CheckCircle className="w-4 h-4" />,
     decision: <Zap className="w-4 h-4" />,
+    error: <AlertCircle className="w-4 h-4" />,
   }
 
   const colors = {
@@ -27,6 +28,7 @@ function LogItem({ log }: { log: StrategyLogEntry }) {
     warning: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
     success: 'text-green-400 bg-green-500/10 border-green-500/30',
     decision: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+    error: 'text-red-400 bg-red-500/10 border-red-500/30',
   }
 
   // Fallback to info if type is unknown

@@ -79,34 +79,105 @@ Most energy systems show you data. **HyperVolt simulates the future and self-opt
 - User controls for preferences
 - Carbon footprint tracking
 
-## 🚀 Quick Start
+## 🚀 Quick Start - How to Run
 
 ### Prerequisites
-- Python 3.12+
-- PostgreSQL (optional)
-- Redis
-- MQTT Broker (Mosquitto)
+- Python 3.11+ (3.11 or 3.12)
 - Node.js 18+ (for frontend)
+- Redis (optional - for caching)
 
-### Installation
+### Step 1: Clone and Setup Backend
 
 ```bash
 # Clone the repository
-git clone https://github.com/HyperHawks/HyperVolt.git
+git clone https://github.com/ArYaNsAiNi-here/HyperVolt.git
 cd HyperVolt
 
 # Install Python dependencies
-pip install -r requirements.txt
+cd api
+pip install django djangorestframework django-environ django-cors-headers daphne channels channels-redis django-q2 django-redis pandas
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
-
-# Run migrations
+# Run database migrations
 python manage.py migrate
 
-# Start the system (see Module 2 README for details)
+# (Optional) Add sample sensor data to database
+python -c "
+import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'hypervolt_backend.settings')
+import django
+django.setup()
+from data_pipeline.models import SensorReading, GridData, EnergySource
+
+# Sample sensor readings
+sensors = [
+    ('temperature', 'esp32_001', 28.5, 'celsius'),
+    ('humidity', 'esp32_001', 45.0, 'percent'),
+    ('ldr', 'esp32_001', 3200, 'raw'),
+    ('current', 'esp32_001', 1.5, 'amperes'),
+    ('voltage', 'esp32_001', 228, 'volts'),
+]
+for sensor_type, sensor_id, value, unit in sensors:
+    SensorReading.objects.create(sensor_type=sensor_type, sensor_id=sensor_id, value=value, unit=unit)
+    print(f'Created {sensor_type}: {value}')
+
+# Energy sources
+for source_type, capacity, priority in [('solar', 3000, 3), ('battery', 10000, 2), ('grid', 10000, 1)]:
+    EnergySource.objects.get_or_create(source_type=source_type, defaults={'capacity': capacity, 'priority': priority, 'is_available': True})
+print('Database populated!')
+"
+
+# Start Django backend (Terminal 1)
+python manage.py runserver 0.0.0.0:8000
 ```
+
+### Step 2: Setup and Run Frontend
+
+```bash
+# Open new terminal, navigate to website folder
+cd website
+
+# Install dependencies
+npm install --legacy-peer-deps
+
+# Start development server (Terminal 2)
+npm run dev
+```
+
+### Step 3: Access the Dashboard
+
+Open your browser and go to:
+- **Frontend Dashboard**: http://localhost:3000
+- **Backend API**: http://localhost:8000/api/
+
+### Quick API Testing
+
+```bash
+# Test AI Status
+curl http://localhost:8000/api/ai/status/
+
+# Get sensor data from database
+curl http://localhost:8000/api/sensor-readings/all_latest/
+
+# Make AI decision (saves to database)
+curl -X POST http://localhost:8000/api/ai/decide/
+
+# Get AI decision history
+curl http://localhost:8000/api/ai-decisions/history/?limit=5
+
+# Get energy forecast
+curl http://localhost:8000/api/ai/forecast/?hours=6
+```
+
+### What You'll See
+
+1. **Dashboard Header**: Shows AI status and DB connection status
+2. **Current Energy Source**: Displays which source (Solar/Battery/Grid) the AI recommends
+3. **Sensor Data**: Temperature, humidity, LDR, current, voltage from database
+4. **Energy Flow Visualization**: 3D representation of energy routing
+5. **AI Decision History**: Past decisions saved in database
+6. **Energy Forecast Chart**: Predicted demand for next hours
+
+---
 
 ## 📊 Key Features
 
@@ -207,138 +278,43 @@ This is a hackathon project. For any questions or collaboration, please open an 
 
 For technical issues or questions about Module 2 (Data Pipeline), see the [Module 2 README](./MODULE2_README.md).
 
-## 🔧 AI Inference Configuration
+## 🔧 AI Configuration
 
-### Sensor Data Modes
+### Data Source
+The AI reads sensor data directly from the database:
+- Sensor readings from `SensorReading` table
+- Carbon intensity from `GridData` table
+- AI decisions are saved to `AIDecision` table
 
-The AI inference service supports two modes for reading sensor data:
+### Adding Sensor Data
 
-#### 1. Simulation Mode (Default)
-Perfect for testing without physical hardware. Edit `api/data/simulation_sensors.csv` to simulate different conditions:
+You can add sensor data via:
 
-```csv
-timestamp,sensor_type,value
-2026-01-27 12:00:00,temperature,28.5
-2026-01-27 12:00:00,humidity,45.0
-2026-01-27 12:00:00,ldr,3500
-2026-01-27 12:00:00,current,1.2
-2026-01-27 12:00:00,voltage,230.0
+1. **Django Admin**: http://localhost:8000/admin/
+2. **REST API**:
+```bash
+curl -X POST http://localhost:8000/api/sensor-readings/ \
+  -H "Content-Type: application/json" \
+  -d '{"sensor_type": "temperature", "sensor_id": "esp32_001", "value": 28.5, "unit": "celsius"}'
 ```
-
-**LDR Values:**
-- High (3000+) = Daytime / High solar availability
-- Low (<500) = Nighttime / No solar
-
-#### 2. Real Hardware Mode
-When you connect physical sensors, switch to real mode:
-
-```python
-# In api/data_pipeline/services/ai_inference.py
-USE_SIMULATION_FILE = False  # Change to False
-```
-
-The system will automatically read from your database populated by MQTT sensors.
-
-### Dynamic User Preferences
-
-Control AI behavior through user preferences:
-
-```python
-# Set cost priority (0-100)
-UserPreferences.objects.create(
-    preference_key='cost_priority',
-    preference_value=70  # 70% cost focus, 30% carbon focus
-)
-```
-
-The AI will automatically fetch and apply these weights before each optimization.
+3. **Hardware (ESP32/Raspberry Pi)**: Send data via MQTT to topic `HyperVolt/sensors/{location}/{sensor_type}`
 
 ### API Endpoints
 
-#### Forecast Energy Demand
+#### AI Endpoints
 ```bash
-GET /api/predictions/forecast/?hours=6
+GET  /api/ai/status/          # Check AI service status
+GET  /api/ai/forecast/        # Get energy demand forecast
+POST /api/ai/decide/          # Make AI decision (saves to DB)
+GET  /api/ai/conditions/      # Get current conditions
 ```
 
-#### Get Source Recommendation
+#### Data Endpoints
 ```bash
-POST /api/predictions/recommend_source/
-{
-    "load_name": "HVAC Living Room",
-    "load_priority": 75,
-    "load_power": 2000
-}
-```
-
-#### Make Comprehensive Decision
-```bash
-POST /api/predictions/decide/
-```
-
-This endpoint:
-- Forecasts energy demand
-- Optimizes source allocation
-- Publishes decision to MQTT (`HyperVolt/commands/control`)
-
-#### Retrain AI Model
-```bash
-POST /api/predictions/retrain/
-```
-
-Exports recent data from database, retrains the model, and reloads it into memory.
-
-### MQTT Integration
-
-The AI service publishes decisions to MQTT for hardware actuation:
-
-**Topic:** `HyperVolt/commands/control`
-
-**Payload:**
-```json
-{
-    "command": "switch_source",
-    "source": "solar",
-    "details": {
-        "predicted_demand_kwh": 1.5,
-        "source_allocation": [["solar", 1.0], ["battery", 0.5]],
-        "cost": 3.5,
-        "carbon": 250.0
-    },
-    "timestamp": "2026-01-27T12:00:00Z"
-}
-```
-
-Your hardware (ESP32/Raspberry Pi) should subscribe to this topic and execute the physical switch.
-
-### Testing the AI Service
-
-1. **Check AI Status:**
-```bash
-GET /api/predictions/status/
-```
-
-2. **Test with Simulation Data:**
-```bash
-# Edit api/data/simulation_sensors.csv
-# Change ldr to 4000 (daytime)
-GET /api/predictions/forecast/
-
-# Expected: Recommends solar power
-```
-
-3. **Test Night Scenario:**
-```bash
-# Change ldr to 100 (nighttime)
-GET /api/predictions/forecast/
-
-# Expected: Recommends grid/battery
-```
-
-4. **Switch to Real Sensors:**
-```python
-# Set USE_SIMULATION_FILE = False
-# Restart Django server
-# AI will now read from SensorReading database table
+GET  /api/sensor-readings/all_latest/  # All sensors as one object
+GET  /api/ai-decisions/history/        # AI decision history
+GET  /api/ai-decisions/latest/         # Most recent decision
+GET  /api/energy-sources/available/    # Available power sources
 ```
 
 ---

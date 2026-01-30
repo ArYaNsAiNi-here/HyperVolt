@@ -17,7 +17,8 @@ from .serializers import (
 )
 from .services.cache_manager import SensorBufferManager
 from .services.energy_optimizer import EnergySourceOptimizer
-from .services.ai_inference import AIInferenceService
+# Use simple AI service that works without TensorFlow
+from .services.simple_ai import SimpleAIService
 
 
 class SensorReadingViewSet(viewsets.ModelViewSet):
@@ -54,6 +55,35 @@ class SensorReadingViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(latest_readings, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def all_latest(self, request):
+        """Get all sensor readings as a single consolidated object."""
+        sensor_data = {
+            'temperature': 25.0,
+            'humidity': 50.0,
+            'ldr': 2000,
+            'current': 1.0,
+            'voltage': 230.0,
+        }
+        last_updated = None
+        
+        for sensor_type in sensor_data.keys():
+            reading = self.queryset.filter(
+                sensor_type=sensor_type
+            ).order_by('-timestamp').first()
+            
+            if reading:
+                sensor_data[sensor_type] = float(reading.value)
+                if not last_updated or reading.timestamp > last_updated:
+                    last_updated = reading.timestamp
+        
+        return Response({
+            'timestamp': timezone.now().isoformat(),
+            'last_sensor_update': last_updated.isoformat() if last_updated else None,
+            'sensors': sensor_data,
+            'source': 'database'
+        })
 
     @action(detail=False, methods=['get'])
     def recent(self, request):
@@ -209,6 +239,56 @@ class AIDecisionViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def latest(self, request):
+        """Get the most recent AI decision."""
+        decision_type = request.query_params.get('decision_type')
+        
+        queryset = self.queryset
+        if decision_type:
+            queryset = queryset.filter(decision_type=decision_type)
+        
+        latest = queryset.order_by('-timestamp').first()
+        
+        if latest:
+            serializer = self.get_serializer(latest)
+            return Response(serializer.data)
+        
+        return Response({'message': 'No decisions found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=False, methods=['get'])
+    def history(self, request):
+        """Get a list of recent AI decisions with summary data for display."""
+        limit = int(request.query_params.get('limit', 10))
+        limit = min(limit, 50)  # Cap at 50
+        
+        decisions = self.queryset.order_by('-timestamp')[:limit]
+        
+        result = []
+        for decision in decisions:
+            decision_data = decision.decision or {}
+            current_decision = decision_data.get('current_decision', {})
+            
+            result.append({
+                'id': decision.id,
+                'timestamp': decision.timestamp.isoformat(),
+                'decision_type': decision.decision_type,
+                'reasoning': decision.reasoning,
+                'confidence': decision.confidence,
+                'applied': decision.applied,
+                'primary_source': current_decision.get('primary_source', 'unknown'),
+                'predicted_demand_kwh': current_decision.get('predicted_demand_kwh', 0),
+                'battery_percentage': current_decision.get('battery_percentage', 0),
+                'solar_available': current_decision.get('solar_available', 0),
+                'cost': current_decision.get('cost', 0),
+                'carbon': current_decision.get('carbon', 0),
+            })
+        
+        return Response({
+            'count': len(result),
+            'decisions': result
+        })
 
 
 class EnergySourceViewSet(viewsets.ModelViewSet):
@@ -459,16 +539,16 @@ class AIPredictionViewSet(viewsets.ViewSet):
     """
     ViewSet for AI model predictions and inference.
     
-    This is the main interface for Module 3 (AI) integration with the API.
+    This is the main interface for AI integration with the API.
     Provides endpoints for:
-    - Energy demand forecasting
+    - Energy demand forecasting with peak hour detection
     - Energy source recommendations
     - Real-time decision making
     """
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.ai_service = AIInferenceService()
+        self.ai_service = SimpleAIService()
     
     @action(detail=False, methods=['get'])
     def status(self, request):
@@ -477,16 +557,8 @@ class AIPredictionViewSet(viewsets.ViewSet):
         
         Returns information about loaded models and capabilities.
         """
-        return Response({
-            'available': self.ai_service.is_available(),
-            'models_loaded': self.ai_service.models_loaded,
-            'capabilities': {
-                'demand_forecasting': self.ai_service.is_available(),
-                'source_optimization': self.ai_service.is_available(),
-                'decision_making': self.ai_service.is_available()
-            },
-            'timestamp': timezone.now().isoformat()
-        })
+        status = self.ai_service.get_status()
+        return Response(status)
     
     @action(detail=False, methods=['get'])
     def forecast(self, request):
@@ -501,33 +573,59 @@ class AIPredictionViewSet(viewsets.ViewSet):
             "timestamp": "2026-01-26T12:00:00Z",
             "forecast_horizon": 6,
             "predictions": [
-                {"hour": 1, "predicted_kwh": 1.5, "timestamp": "..."},
+                {"hour": 1, "predicted_kwh": 1.5, "is_peak_hour": true, ...},
                 ...
             ],
-            "available": true,
-            "model_type": "lstm"
+            "peak_hours": [...],
+            "recommendation": "...",
+            "available": true
         }
         """
-        hours = int(request.query_params.get('hours', 6))
-        hours = min(hours, 24)  # Cap at 24 hours
+        try:
+            hours = int(request.query_params.get('hours', 6))
+        except (ValueError, TypeError):
+            hours = 6
+        hours = max(1, min(hours, 24))  # Clamp between 1 and 24 hours
         
         result = self.ai_service.forecast_demand(hours_ahead=hours)
         
         # Record the prediction
-        if result.get('available') and 'predictions' in result:
-            try:
-                AIDecision.objects.create(
-                    decision_type='general',
-                    timestamp=timezone.now(),
-                    decision=result,
-                    confidence=0.85,
-                    applied=False,
-                    reasoning='Energy demand forecast'
-                )
-            except Exception as e:
-                print(f"Warning: Could not record forecast: {e}")
+        try:
+            AIDecision.objects.create(
+                decision_type='general',
+                timestamp=timezone.now(),
+                decision=result,
+                confidence=0.85,
+                applied=False,
+                reasoning=result.get('recommendation', 'Energy demand forecast')
+            )
+        except Exception as e:
+            print(f"Warning: Could not record forecast: {e}")
         
         return Response(result)
+    
+    @action(detail=False, methods=['get'])
+    def peak_hours(self, request):
+        """
+        Get predicted peak hours for energy planning.
+        
+        Returns upcoming peak hours and high-demand periods.
+        """
+        try:
+            hours = int(request.query_params.get('hours', 24))
+        except (ValueError, TypeError):
+            hours = 24
+        hours = max(1, min(hours, 48))  # Clamp between 1 and 48 hours
+        
+        result = self.ai_service.forecast_demand(hours_ahead=hours)
+        
+        return Response({
+            'timestamp': result['timestamp'],
+            'peak_hours': result['peak_hours'],
+            'next_peak': result['next_peak'],
+            'total_predictions': len(result['predictions']),
+            'recommendation': result['recommendation']
+        })
     
     @action(detail=False, methods=['post'])
     def recommend_source(self, request):
@@ -538,58 +636,31 @@ class AIPredictionViewSet(viewsets.ViewSet):
         {
             "load_name": "HVAC Living Room",
             "load_priority": 75,
-            "load_power": 2000,
-            "current_conditions": {...}  // Optional
-        }
-        
-        Returns:
-        {
-            "timestamp": "2026-01-26T12:00:00Z",
-            "load_name": "HVAC Living Room",
-            "recommended_source": "solar",
-            "source_allocation": [["solar", 1.5], ["battery", 0.5]],
-            "metrics": {
-                "estimated_cost": 3.5,
-                "estimated_carbon": 250.0,
-                "battery_charge": 8.5
-            },
-            "reasoning": "Primary source: solar | High solar availability",
-            "confidence": 0.85,
-            "algorithm": "ml_optimizer",
-            "available": true
+            "load_power": 2000
         }
         """
-        load_name = request.data.get('load_name')
+        load_name = request.data.get('load_name', 'Default Load')
         load_priority = request.data.get('load_priority', 50)
-        load_power = request.data.get('load_power', 0)
-        current_conditions = request.data.get('current_conditions')
-        
-        if not load_name:
-            return Response(
-                {'error': 'load_name is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        load_power = request.data.get('load_power', 1000)
         
         result = self.ai_service.recommend_source(
             load_name=load_name,
             load_priority=load_priority,
-            load_power=load_power,
-            current_conditions=current_conditions
+            load_power=load_power
         )
         
         # Record the recommendation
-        if result.get('available'):
-            try:
-                AIDecision.objects.create(
-                    decision_type='power_source',
-                    timestamp=timezone.now(),
-                    decision=result,
-                    confidence=result.get('confidence', 0.85),
-                    applied=False,
-                    reasoning=result.get('reasoning', '')
-                )
-            except Exception as e:
-                print(f"Warning: Could not record recommendation: {e}")
+        try:
+            AIDecision.objects.create(
+                decision_type='power_source',
+                timestamp=timezone.now(),
+                decision=result,
+                confidence=result.get('confidence', 0.85),
+                applied=False,
+                reasoning=result.get('reasoning', '')
+            )
+        except Exception as e:
+            print(f"Warning: Could not record recommendation: {e}")
         
         return Response(result)
     
@@ -598,62 +669,53 @@ class AIPredictionViewSet(viewsets.ViewSet):
         """
         Make a comprehensive energy management decision.
         
-        Combines demand forecasting and source optimization to provide
-        a complete decision with recommendations.
+        Combines demand forecasting, peak detection, and source optimization.
         
         Returns:
         {
             "timestamp": "2026-01-26T12:00:00Z",
-            "forecast": [
-                {"hour": 1, "predicted_kwh": 1.5, ...},
-                ...
-            ],
+            "forecast": [...],
+            "peak_hours": [...],
+            "current_conditions": {...},
             "current_decision": {
                 "predicted_demand_kwh": 1.5,
                 "source_allocation": [["solar", 1.0], ["battery", 0.5]],
                 "cost": 3.5,
                 "carbon": 250.0,
-                "battery_charge": 8.5
+                "battery_charge": 8.5,
+                "primary_source": "solar"
             },
-            "recommendation": "Using solar power | Battery well charged",
+            "recommendation": "...",
             "available": true
         }
         """
         result = self.ai_service.make_decision()
         
         # Record the decision
-        if result.get('available'):
-            try:
-                AIDecision.objects.create(
-                    decision_type='general',
-                    timestamp=timezone.now(),
-                    decision=result,
-                    confidence=0.85,
-                    applied=False,
-                    reasoning=result.get('recommendation', '')
-                )
-            except Exception as e:
-                print(f"Warning: Could not record decision: {e}")
+        try:
+            AIDecision.objects.create(
+                decision_type='general',
+                timestamp=timezone.now(),
+                decision=result,
+                confidence=0.85,
+                applied=True,
+                reasoning=result.get('recommendation', '')
+            )
+        except Exception as e:
+            print(f"Warning: Could not record decision: {e}")
         
         return Response(result)
     
-    @action(detail=False, methods=['post'])
-    def retrain(self, request):
+    @action(detail=False, methods=['get'])
+    def conditions(self, request):
         """
-        Trigger AI model retraining using recent data from the database.
+        Get current sensor conditions being used by AI.
         
-        This endpoint exports recent sensor and grid data to CSV format,
-        retrains the AI models, and reloads them into memory.
-        
-        Returns:
-        {
-            "success": true,
-            "message": "Model retrained and reloaded"
-        }
+        Useful for debugging and monitoring.
         """
-        result = self.ai_service.trigger_retraining()
-        
-        if result.get('success'):
-            return Response(result, status=status.HTTP_200_OK)
-        else:
-            return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        conditions = self.ai_service.get_conditions()
+        return Response({
+            'timestamp': timezone.now().isoformat(),
+            'conditions': conditions,
+            'source': conditions.get('source', 'unknown')
+        })
