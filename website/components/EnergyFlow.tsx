@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Sun, Battery, Zap, Home } from 'lucide-react'
+import { Sun, Battery, Plug, Home, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface EnergyFlowProps {
@@ -13,288 +13,192 @@ interface EnergyFlowProps {
   className?: string
 }
 
-interface SourceNodeProps {
-  type: 'solar' | 'battery' | 'grid'
-  output: number
-  isActive: boolean
-  position: { x: number; y: number }
-}
-
-function SourceNode({ type, output, isActive, position }: SourceNodeProps) {
-  const icons = {
-    solar: <Sun className="w-8 h-8" />,
-    battery: <Battery className="w-8 h-8" />,
-    grid: <Zap className="w-8 h-8" />,
-  }
-
-  const colors = {
-    solar: {
-      bg: 'bg-yellow-500/20',
-      border: 'border-yellow-500',
-      text: 'text-yellow-500',
-      glow: 'shadow-yellow-500/50',
-    },
-    battery: {
-      bg: 'bg-orange-500/20',
-      border: 'border-orange-500',
-      text: 'text-orange-500',
-      glow: 'shadow-orange-500/50',
-    },
-    grid: {
-      bg: 'bg-red-500/20',
-      border: 'border-red-500',
-      text: 'text-red-500',
-      glow: 'shadow-red-500/50',
-    },
-  }
-
-  const color = colors[type]
-
-  return (
-    <motion.div
-      className={cn(
-        'absolute flex flex-col items-center gap-2',
-      )}
-      style={{
-        left: `${position.x}%`,
-        top: `${position.y}%`,
-        transform: 'translate(-50%, -50%)',
-      }}
-      animate={{
-        scale: isActive ? [1, 1.1, 1] : 1,
-      }}
-      transition={{
-        duration: 2,
-        repeat: isActive ? Infinity : 0,
-        ease: 'easeInOut',
-      }}
-    >
-      <div
-        className={cn(
-          'relative w-20 h-20 rounded-full flex items-center justify-center border-2',
-          color.bg,
-          color.border,
-          color.text,
-          isActive && `shadow-lg ${color.glow}`,
-        )}
-      >
-        {icons[type]}
-        {isActive && (
-          <motion.div
-            className={cn(
-              'absolute inset-0 rounded-full border-2',
-              color.border,
-            )}
-            initial={{ scale: 1, opacity: 1 }}
-            animate={{ scale: 1.5, opacity: 0 }}
-            transition={{
-              duration: 1.5,
-              repeat: Infinity,
-              ease: 'easeOut',
-            }}
-          />
-        )}
-      </div>
-      <div className="text-center">
-        <div className={cn('text-sm font-semibold capitalize', color.text)}>
-          {type}
-        </div>
-        <div className="text-xs text-gray-400">{output.toFixed(1)}kW</div>
-      </div>
-    </motion.div>
-  )
-}
-
-function EnergyPath({ 
-  from, 
-  to, 
-  isActive,
-  color 
-}: { 
-  from: { x: number; y: number }
-  to: { x: number; y: number }
-  isActive: boolean
-  color: string
-}) {
-  // Calculate path using coordinates that work with viewBox 0 0 100 100
-  const midX = (from.x + to.x) / 2
-  const midY = (from.y + to.y) / 2 - 5 // Slight curve
-
-  const pathD = `M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`
-
-  return (
-    <>
-      {/* Path line */}
-      <motion.path
-        d={pathD}
-        fill="none"
-        stroke={color}
-        strokeWidth="3"
-        strokeDasharray="8,4"
-        initial={{ pathLength: 0, opacity: 0.3 }}
-        animate={{ 
-          pathLength: isActive ? 1 : 0,
-          opacity: isActive ? 0.8 : 0.2,
-        }}
-        transition={{ duration: 0.5 }}
-      />
-      
-      {/* Animated particles */}
-      {isActive && (
-        <>
-          <motion.circle
-            r="5"
-            fill={color}
-            initial={{ offsetDistance: '0%', opacity: 1 }}
-            animate={{ offsetDistance: '100%', opacity: 0 }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'linear',
-              delay: 0,
-            }}
-            style={{
-              offsetPath: `path("${pathD}")`,
-            }}
-          />
-          <motion.circle
-            r="5"
-            fill={color}
-            initial={{ offsetDistance: '0%', opacity: 1 }}
-            animate={{ offsetDistance: '100%', opacity: 0 }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'linear',
-              delay: 0.7,
-            }}
-            style={{
-              offsetPath: `path("${pathD}")`,
-            }}
-          />
-          <motion.circle
-            r="5"
-            fill={color}
-            initial={{ offsetDistance: '0%', opacity: 1 }}
-            animate={{ offsetDistance: '100%', opacity: 0 }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'linear',
-              delay: 1.4,
-            }}
-            style={{
-              offsetPath: `path("${pathD}")`,
-            }}
-          />
-        </>
-      )}
-    </>
-  )
-}
-
 export default function EnergyFlow({
   activeSource,
   solarOutput,
   batteryOutput,
   gridOutput,
   homeConsumption,
-  className,
 }: EnergyFlowProps) {
-  // Node positions (percentage) - adjusted to keep all nodes within bounds
+  // CONFIG: 100x100 Coordinate System
   const positions = {
-    solar: { x: 20, y: 25 },
-    battery: { x: 20, y: 70 },
-    grid: { x: 50, y: 50 },
-    home: { x: 80, y: 50 },
+    solar:   { x: 20, y: 20 },
+    grid:    { x: 80, y: 20 },
+    battery: { x: 20, y: 80 },
+    home:    { x: 50, y: 80 }, // Moved Home to Bottom-Center for better symmetry
   }
 
-  const colors = {
-    solar: '#FDB022',
-    battery: '#FF6B35',
-    grid: '#EF4444',
+  // Calculate paths that stop at the edge of the icons
+  const getWirePath = (source: 'solar' | 'battery' | 'grid') => {
+    const start = positions[source]
+    const end = positions.home
+
+    if (source === 'solar') {
+      // Solar (Top-Left) to Home (Bottom-Center)
+      return `M ${start.x} ${start.y + 5} C ${start.x} ${start.y + 40}, ${end.x - 10} ${end.y - 40}, ${end.x} ${end.y - 10}`
+    }
+    if (source === 'grid') {
+      // Grid (Top-Right) to Home (Bottom-Center)
+      return `M ${start.x} ${start.y + 5} C ${start.x} ${start.y + 40}, ${end.x + 10} ${end.y - 40}, ${end.x} ${end.y - 10}`
+    }
+    if (source === 'battery') {
+      // Battery (Bottom-Left) to Home (Bottom-Center)
+      return `M ${start.x + 8} ${start.y} C ${start.x + 20} ${start.y}, ${end.x - 20} ${end.y}, ${end.x - 8} ${end.y}`
+    }
+    return ''
   }
 
   return (
-    <div className={cn('relative w-full h-full bg-gray-900/50 rounded-lg p-8 overflow-hidden', className)}>
-      {/* Energy paths - using viewBox for responsive SVG positioning */}
-      <svg 
-        className="absolute inset-0 w-full h-full pointer-events-none" 
-        style={{ zIndex: 0 }}
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-      >
-        <EnergyPath
-          from={positions.solar}
-          to={positions.home}
-          isActive={activeSource === 'solar'}
-          color={colors.solar}
-        />
-        <EnergyPath
-          from={positions.battery}
-          to={positions.home}
-          isActive={activeSource === 'battery'}
-          color={colors.battery}
-        />
-        <EnergyPath
-          from={positions.grid}
-          to={positions.home}
-          isActive={activeSource === 'grid'}
-          color={colors.grid}
-        />
-      </svg>
+    <div className="w-full h-full bg-gray-900/50 rounded-xl border border-gray-700/50 p-6 relative overflow-hidden flex flex-col min-h-[350px]">
+      <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2 relative z-10">
+        <Zap className="w-5 h-5 text-yellow-400" />
+        Real-time Power Flow
+      </h3>
 
-      {/* Source nodes */}
-      <SourceNode
-        type="solar"
-        output={solarOutput}
-        isActive={activeSource === 'solar'}
-        position={positions.solar}
-      />
-      <SourceNode
-        type="battery"
-        output={batteryOutput}
-        isActive={activeSource === 'battery'}
-        position={positions.battery}
-      />
-      <SourceNode
-        type="grid"
-        output={gridOutput}
-        isActive={activeSource === 'grid'}
-        position={positions.grid}
-      />
+      <div className="flex-1 relative">
+        {/* SVG Layer (Background Wires) */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" viewBox="0 0 100 100" preserveAspectRatio="none">
+          {/* Static Cables */}
+          <path d={getWirePath('solar')} fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" />
+          <path d={getWirePath('grid')} fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" />
+          <path d={getWirePath('battery')} fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" />
 
-      {/* Home node */}
-      <motion.div
-        className="absolute flex flex-col items-center gap-2"
-        style={{
-          left: `${positions.home.x}%`,
-          top: `${positions.home.y}%`,
-          transform: 'translate(-50%, -50%)',
-        }}
-      >
-        <div className="relative w-20 h-20 rounded-full flex items-center justify-center border-2 bg-blue-500/20 border-blue-500 text-blue-500">
-          <Home className="w-8 h-8" />
-        </div>
-        <div className="text-center">
-          <div className="text-sm font-semibold text-blue-500">Home</div>
-          <div className="text-xs text-gray-400">{homeConsumption.toFixed(1)}kW</div>
-        </div>
-      </motion.div>
+          {/* Animated Energy Flow */}
+          <AnimatedWire
+            path={getWirePath('solar')}
+            color="#4ade80"
+            isActive={activeSource === 'solar' || solarOutput > 0}
+          />
+          <AnimatedWire
+            path={getWirePath('grid')}
+            color="#f87171"
+            isActive={activeSource === 'grid' || gridOutput > 0}
+          />
+          <AnimatedWire
+            path={getWirePath('battery')}
+            color="#facc15"
+            isActive={activeSource === 'battery' || batteryOutput > 0}
+          />
+        </svg>
 
-      {/* Legend */}
-      <div className="absolute bottom-4 right-4 bg-gray-800/80 rounded-lg p-3 text-xs">
-        <div className="text-gray-400 font-semibold mb-2">Active Source</div>
-        <div className="flex items-center gap-2">
-          <div className={cn(
-            'w-3 h-3 rounded-full',
-            activeSource === 'solar' && 'bg-yellow-500',
-            activeSource === 'battery' && 'bg-orange-500',
-            activeSource === 'grid' && 'bg-red-500',
-          )} />
-          <span className="text-gray-300 capitalize">{activeSource}</span>
+        {/* HTML Layer (Icons) */}
+        <div className="relative w-full h-full z-10">
+          <Node
+            pos={positions.solar}
+            icon={<Sun className="w-6 h-6" />}
+            label="Solar"
+            value={solarOutput}
+            active={activeSource === 'solar'}
+            color="text-green-400"
+            bg="bg-green-500/10 border-green-500"
+          />
+
+          <Node
+            pos={positions.grid}
+            icon={<Plug className="w-6 h-6" />}
+            label="Grid"
+            value={gridOutput}
+            active={activeSource === 'grid'}
+            color="text-red-400"
+            bg="bg-red-500/10 border-red-500"
+          />
+
+          <Node
+            pos={positions.battery}
+            icon={<Battery className="w-6 h-6" />}
+            label="Battery"
+            value={batteryOutput}
+            active={activeSource === 'battery'}
+            color="text-yellow-400"
+            bg="bg-yellow-500/10 border-yellow-500"
+          />
+
+          {/* Home Node (Center Bottom) */}
+          <div
+            className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
+            style={{ left: `${positions.home.x}%`, top: `${positions.home.y}%` }}
+          >
+            <div className="relative">
+              <div className="w-20 h-20 rounded-full bg-gray-900 border-4 border-blue-500 flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.4)] z-20">
+                <Home className="w-9 h-9 text-blue-400" />
+              </div>
+              {/* Pulse Ring for Home */}
+              <div className="absolute inset-0 rounded-full border border-blue-500/50 animate-[ping_3s_linear_infinite]" />
+            </div>
+            <div className="mt-2 text-center bg-gray-900/90 backdrop-blur px-3 py-1 rounded-lg border border-gray-700 shadow-xl">
+              <p className="text-xs text-gray-400">Total Load</p>
+              <p className="text-xl font-bold text-white">{homeConsumption.toFixed(2)} kW</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  )
+}
+
+// --- Helper Components ---
+
+function AnimatedWire({ path, color, isActive }: { path: string, color: string, isActive: boolean }) {
+  if (!isActive) return null;
+
+  return (
+    <>
+      {/* Glow path under the moving dash */}
+      <motion.path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeOpacity="0.4"
+        strokeLinecap="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 1 }}
+      />
+
+      {/* The Moving Dash (Energy Packet) */}
+      <motion.path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth="4"
+        strokeDasharray="10 120" // Short dash (packet), long gap
+        strokeLinecap="round"
+        // ANIMATION FIX: 'strokeDashoffset' moves from positive to negative to flow forward
+        animate={{ strokeDashoffset: [0, -130] }}
+        transition={{
+          duration: 1.5, // Adjust speed here
+          repeat: Infinity,
+          ease: "linear"
+        }}
+      />
+    </>
+  )
+}
+
+function Node({ pos, icon, label, value, active, color, bg }: any) {
+  return (
+    <motion.div
+      className={cn(
+        "absolute transform -translate-x-1/2 -translate-y-1/2 p-3 rounded-xl border backdrop-blur-sm transition-all duration-300",
+        active
+          ? `${bg} scale-110 shadow-[0_0_20px_rgba(0,0,0,0.5)] z-30 ring-2 ring-offset-2 ring-offset-gray-900 ring-opacity-60`
+          : "bg-gray-800/50 border-gray-700 opacity-70 scale-95 grayscale"
+      )}
+      style={{
+        left: `${pos.x}%`,
+        top: `${pos.y}%`,
+        // Dynamic coloring for the active ring based on the source color
+        ['--tw-ring-color' as any]: active ? 'currentColor' : 'transparent'
+      }}
+    >
+      <div className={`flex items-center gap-3 ${active ? color : 'text-gray-400'}`}>
+        {icon}
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
+          <p className="text-lg font-bold tabular-nums">{value.toFixed(2)} kW</p>
+        </div>
+      </div>
+    </motion.div>
   )
 }
