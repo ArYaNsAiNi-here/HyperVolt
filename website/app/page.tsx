@@ -128,8 +128,10 @@ export default function Dashboard() {
 
     if (message.type === 'ai_decision' && message.data) {
       // Update active source from AI decision if provided
-      if (message.data.to_source) {
-        setActiveSource(message.data.to_source as 'solar' | 'battery' | 'grid')
+      const validSources = ['solar', 'battery', 'grid'] as const
+      const toSource = message.data.to_source
+      if (toSource && validSources.includes(toSource)) {
+        setActiveSource(toSource as 'solar' | 'battery' | 'grid')
       }
       
       addLog({
@@ -137,7 +139,9 @@ export default function Dashboard() {
         timestamp: new Date().toISOString(),
         type: 'success',
         message: message.data.reasoning || 'AI decision executed',
-        details: message.data.to_source ? `Switched to ${message.data.to_source.toUpperCase()}` : undefined,
+        details: toSource && validSources.includes(toSource) 
+          ? `Switched to ${toSource.toUpperCase()}` 
+          : '',
       })
     }
   }

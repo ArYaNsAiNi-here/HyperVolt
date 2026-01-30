@@ -345,10 +345,9 @@ class AIInferenceService:
                     "type": "sensor_update",  # Must match handler method name in consumers.py
                     "data": {
                         "type": "ai_decision",
-                        "reasoning": decision_data.get('recommendation', ''),
+                        "reasoning": decision_data.get('recommendation', '') or f"AI optimization: {primary_source} selected",
                         "source_allocation": decision_data.get('source_allocation', []),
                         "to_source": primary_source,
-                        "reason": f"AI optimization: {primary_source} selected",
                         "timestamp": timezone.now().isoformat()
                     }
                 }

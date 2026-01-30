@@ -40,20 +40,23 @@ def run_optimization():
             sys.path.append(os.path.join(os.path.dirname(__file__), 'module3-ai'))
             from optimize_sources import SourceOptimizer, EnergySource
         except ImportError:
-            print("Error: Could not import SourceOptimizer. Using API endpoint instead.")
-            # Use API endpoint for optimization
-            response = requests.post(f"{API_URL}/ai/decide/", timeout=10)
-            if response.status_code == 200:
-                result = response.json()
-                print("\n--- AI DECISION (via API) ---")
-                print(f"Recommendation: {result.get('recommendation', 'N/A')}")
-                if 'current_decision' in result:
-                    current = result['current_decision']
-                    print(f"Sources: {current.get('source_allocation', [])}")
-                    print(f"Cost: ₹{current.get('cost', 0):.2f}")
-                    print(f"Carbon: {current.get('carbon', 0):.2f}g")
-            else:
-                print(f"API Error: {response.status_code}")
+            print("Note: Local SourceOptimizer not available. Using API endpoint for optimization.")
+            # Use API endpoint for optimization - this is a valid alternative approach
+            try:
+                response = requests.post(f"{API_URL}/ai/decide/", timeout=10)
+                if response.status_code == 200:
+                    result = response.json()
+                    print("\n--- AI DECISION (via API) ---")
+                    print(f"Recommendation: {result.get('recommendation', 'N/A')}")
+                    if 'current_decision' in result:
+                        current = result['current_decision']
+                        print(f"Sources: {current.get('source_allocation', [])}")
+                        print(f"Cost: ₹{current.get('cost', 0):.2f}")
+                        print(f"Carbon: {current.get('carbon', 0):.2f}g")
+                else:
+                    print(f"API Error: {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to connect to API: {e}")
             return
     
     # Initialize the specific Optimizer logic
@@ -71,14 +74,29 @@ def run_optimization():
         return
 
     # Extract Live Values (Falling back to defaults if API is empty)
-    # Note: In a real run, these keys depend on your exact API response structure
-    current_carbon = 450
-    current_solar = 0.8
+    # Default values used when API data is not available
+    current_carbon = 450  # Default carbon intensity in gCO2eq/kWh
+    current_solar = 0.8   # Default solar radiation factor (0-1)
     
-    if isinstance(grid, list) and len(grid) > 0:
-        current_carbon = grid[0].get('value', 450)
-    elif isinstance(grid, dict):
-        current_carbon = grid.get('carbon_intensity', 450)
+    # Try to extract carbon intensity from grid data
+    # The API returns different formats depending on the endpoint
+    if grid:
+        if isinstance(grid, list) and len(grid) > 0:
+            # Grid data returned as list of readings
+            current_carbon = grid[0].get('value', 450)
+            print(f"  Using carbon intensity from grid list: {current_carbon}g")
+        elif isinstance(grid, dict) and 'results' in grid:
+            # Paginated response format
+            results = grid.get('results', [])
+            if results and len(results) > 0:
+                current_carbon = results[0].get('value', 450)
+                print(f"  Using carbon intensity from paginated response: {current_carbon}g")
+        elif isinstance(grid, dict):
+            # Single reading format
+            current_carbon = grid.get('carbon_intensity', grid.get('value', 450))
+            print(f"  Using carbon intensity from dict: {current_carbon}g")
+    else:
+        print(f"  Using default carbon intensity: {current_carbon}g")
     
     current_power_need = 1.5  # Example: Could be derived from 'current_sensor' amps
 

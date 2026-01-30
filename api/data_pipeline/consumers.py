@@ -70,7 +70,8 @@ class SensorConsumer(AsyncWebsocketConsumer):
         data = event.get('data', {})
         
         # Determine message type from data content
-        message_type = data.get('type', 'sensor_update')
+        # AI decisions and source switches include a 'type' field
+        message_type = data.pop('type', 'sensor_update') if isinstance(data, dict) else 'sensor_update'
         
         # Send the data to the WebSocket
         await self.send(text_data=json.dumps({
