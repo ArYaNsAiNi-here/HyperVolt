@@ -502,8 +502,11 @@ class AIPredictionViewSet(viewsets.ViewSet):
             "available": true
         }
         """
-        hours = int(request.query_params.get('hours', 6))
-        hours = min(hours, 24)  # Cap at 24 hours
+        try:
+            hours = int(request.query_params.get('hours', 6))
+        except (ValueError, TypeError):
+            hours = 6
+        hours = max(1, min(hours, 24))  # Clamp between 1 and 24 hours
         
         result = self.ai_service.forecast_demand(hours_ahead=hours)
         
@@ -529,8 +532,11 @@ class AIPredictionViewSet(viewsets.ViewSet):
         
         Returns upcoming peak hours and high-demand periods.
         """
-        hours = int(request.query_params.get('hours', 24))
-        hours = min(hours, 48)
+        try:
+            hours = int(request.query_params.get('hours', 24))
+        except (ValueError, TypeError):
+            hours = 24
+        hours = max(1, min(hours, 48))  # Clamp between 1 and 48 hours
         
         result = self.ai_service.forecast_demand(hours_ahead=hours)
         

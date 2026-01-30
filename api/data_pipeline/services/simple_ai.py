@@ -7,10 +7,17 @@ Provides energy demand forecasting and source optimization
 import os
 import json
 import math
+import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 from django.conf import settings
 from django.utils import timezone
+
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
 
 
 class SimpleEnergyForecaster:
@@ -48,8 +55,7 @@ class SimpleEnergyForecaster:
             # Base demand from pattern
             base_demand = self.HOURLY_PATTERNS.get(hour, 1.0)
             
-            # Add some variation (±15%)
-            import random
+            # Add some variation (±15%) - deterministic based on time
             random.seed(int(future_time.timestamp()) % 100)
             variation = random.uniform(0.85, 1.15)
             
@@ -180,7 +186,8 @@ class SimpleSourceOptimizer:
                 battery_used = min(battery_available, remaining)
                 allocation.append(('battery', round(battery_used, 3)))
                 remaining -= battery_used
-                self.battery_charge -= battery_used
+                # Ensure battery charge never goes below zero
+                self.battery_charge = max(0, self.battery_charge - battery_used)
                 total_cost += battery_used * self.costs['battery']
                 total_carbon += battery_used * self.carbon['battery']
         
@@ -194,7 +201,8 @@ class SimpleSourceOptimizer:
         if solar_available > power_needed:
             excess = solar_available - power_needed
             charge_amount = min(excess, self.battery_capacity - self.battery_charge)
-            self.battery_charge += charge_amount
+            # Ensure battery charge never exceeds capacity
+            self.battery_charge = min(self.battery_capacity, self.battery_charge + charge_amount)
         
         metrics = {
             'total_power': power_needed,
@@ -265,7 +273,10 @@ class SimpleAIService:
     
     def _read_simulation_file(self) -> Dict:
         """Read conditions from CSV simulation file"""
-        import pandas as pd
+        if not PANDAS_AVAILABLE:
+            print("Warning: pandas not available, using defaults")
+            return self._get_defaults()
+        
         try:
             df = pd.read_csv(self.SIMULATION_FILE)
             sensors = dict(zip(df['sensor_type'], df['value']))
@@ -281,7 +292,8 @@ class SimpleAIService:
                 'grid_price': 6.0,
                 'source': 'simulation'
             }
-        except Exception:
+        except Exception as e:
+            print(f"Error reading simulation file: {e}")
             return self._get_defaults()
     
     def _read_from_database(self) -> Dict:
