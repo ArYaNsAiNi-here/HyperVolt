@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronUp, ChevronDown, List, X } from 'lucide-react'
+import { ChevronUp, ChevronDown, List, X, Terminal } from 'lucide-react'
 import { StrategyLogEntry } from '@/lib/types'
 import StrategyNarrator from './StrategyNarrator'
 
@@ -31,15 +31,15 @@ export default function LogsViewer({ logs }: LogsViewerProps) {
         className="fixed bottom-6 right-6 z-50 p-4 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full shadow-2xl hover:shadow-purple-500/50 transition-all duration-300"
         aria-label="Toggle logs viewer"
       >
-      <div className="relative">
+        <div className="relative">
           <Terminal className="w-6 h-6 text-white" />
           {actualLogCount > 0 && (
-            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+            <span className="absolute -top-3 -right-3 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold border-2 border-purple-600">
               {actualLogCount > 99 ? '99+' : actualLogCount}
             </span>
-          </motion.button>
-        )}
-      </AnimatePresence>
+          )}
+        </div>
+      </motion.button>
 
       {/* Main Logs Panel */}
       <AnimatePresence>
@@ -87,7 +87,11 @@ export default function LogsViewer({ logs }: LogsViewerProps) {
 
             {/* Logs content */}
             <div className={isExpanded ? 'h-[calc(100%-56px)]' : 'h-96'}>
-              <StrategyNarrator initialLogs={logs} className="h-full" onLogCountChange={handleLogCountChange} />
+              <StrategyNarrator
+                initialLogs={logs}
+                className="h-full"
+                onLogCountChange={handleLogCountChange}
+              />
             </div>
           </motion.div>
         )}
