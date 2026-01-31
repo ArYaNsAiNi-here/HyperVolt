@@ -84,7 +84,7 @@ function GLTFModel({
   lightIntensity: number,
   brightnessThreshold: number
 }) {
-  const gltf = useGLTF('/models/tiny_isometric_room.glb')
+  const gltf = useGLTF('/models/isometric_room_school.glb')
 
   // Calculate how "dark" it is. 0 = bright, 1 = total darkness
   const darknessFactor = Math.max(0, Math.min(1, (brightnessThreshold - lightIntensity) / brightnessThreshold))
