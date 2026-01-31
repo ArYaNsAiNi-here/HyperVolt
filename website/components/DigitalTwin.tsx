@@ -144,7 +144,6 @@ class ModelErrorBoundary extends React.Component<
 }
 
 // --- 4. Main Scene Component ---
-// --- 4. Main Scene Component (Updated Fix) ---
 function Scene({
   lightIntensity,
   brightnessThreshold,
@@ -159,22 +158,65 @@ function Scene({
     ? ((brightnessThreshold - lightIntensity) / 100) * 5
     : 0
 
-  // Calculate dynamic ambient light based on LDR sensor
-  const dynamicAmbient = Math.max(0.1, (lightIntensity / 100) * 1.5)
+  // --- UPDATED: Lighting Logic ---
+  // Increased base from 0.1 to 0.5 (Brighter Night)
+  // Increased multiplier from 1.5 to 3.0 (Brighter Day)
+  const dynamicAmbient = Math.max(0.5, (lightIntensity / 100) * 3.0)
+
+  // --- NEW: IST Sun Position Logic ---
+  const [sunPosition, setSunPosition] = useState<[number, number, number]>([10, 10, 5])
+
+  useEffect(() => {
+    const updateSunPosition = () => {
+      const now = new Date();
+      // Calculate IST time (UTC + 5.5 hours)
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const istDate = new Date(utc + (3600000 * 5.5));
+
+      const hours = istDate.getHours();
+      const minutes = istDate.getMinutes();
+      const timeDecimal = hours + minutes / 60;
+
+      // Sun Logic: Rises at 6:00 (0), Sets at 18:00 (PI)
+      // Radius of 20 units
+      let x = 10, y = 10, z = 5; // Defaults
+
+      if (timeDecimal >= 6 && timeDecimal <= 18) {
+        // Day time: Move sun in an arc
+        const dayProgress = (timeDecimal - 6) / 12; // 0.0 to 1.0
+        const angle = dayProgress * Math.PI; // 0 to PI
+
+        x = Math.cos(angle) * 20 * -1; // East to West
+        y = Math.sin(angle) * 20;      // Height
+        z = 10;
+      } else {
+        // Night time: Moon/Sun is "down" or set to a static night position
+        x = -10;
+        y = -5;
+        z = -10;
+      }
+
+      setSunPosition([x, y, z]);
+    };
+
+    updateSunPosition();
+    const interval = setInterval(updateSunPosition, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <>
       <ambientLight intensity={dynamicAmbient} />
       <directionalLight
-        position={[10, 10, 5]}
-        intensity={lightIntensity > brightnessThreshold ? 1 : 0.2}
+        position={sunPosition}
+        intensity={lightIntensity > brightnessThreshold ? 1.5 : 0.3} // Boosted direct sunlight intensity
         castShadow
+        shadow-mapSize={[1024, 1024]}
       />
 
       <ModelErrorBoundary
         onError={() => onLoadStateChange('error')}
         fallback={
-          // Provide the actual props here instead of "..."
           <GeometricHouse
             lightIntensity={lightIntensity}
             brightnessThreshold={brightnessThreshold}

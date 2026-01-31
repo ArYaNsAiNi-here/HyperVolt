@@ -432,7 +432,7 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="flex gap-8">
-                      <div className="text-center"><p className="text-2xl font-bold text-green-400">{solarPowerKW.toFixed(2)} W</p><p className="text-xs text-gray-400">Solar (V×I)</p></div>
+                      <div className="text-center"><p className="text-2xl font-bold text-green-400">{solarPowerKW.toFixed(2)} W</p><p className="text-xs text-gray-400">Solar</p></div>
                       <div className="text-center"><p className="text-2xl font-bold text-yellow-400">{batteryPercentage.toFixed(0)}%</p><p className="text-xs text-gray-400">Battery</p></div>
                       <div className="text-center"><p className={`text-2xl font-bold ${isCurrentlyPeakHour ? 'text-red-400' : 'text-blue-400'}`}>{powerConsumption.toFixed(2)} W</p><p className="text-xs text-gray-400">{isCurrentlyPeakHour ? 'Peak' : 'Normal'}</p></div>
                     </div>
