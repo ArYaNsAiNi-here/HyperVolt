@@ -25,7 +25,7 @@ export default function EnergyFlow({
     solar:   { x: 20, y: 20 },
     grid:    { x: 80, y: 20 },
     battery: { x: 20, y: 80 },
-    home:    { x: 50, y: 80 }, // Moved Home to Bottom-Center for better symmetry
+    home:    { x: 50, y: 80 },
   }
 
   // Calculate paths that stop at the edge of the icons
@@ -35,15 +35,20 @@ export default function EnergyFlow({
 
     if (source === 'solar') {
       // Solar (Top-Left) to Home (Bottom-Center)
+      // Enters from the top (y-10 is roughly 40px on typical screens)
       return `M ${start.x} ${start.y + 5} C ${start.x} ${start.y + 40}, ${end.x - 10} ${end.y - 40}, ${end.x} ${end.y - 10}`
     }
     if (source === 'grid') {
       // Grid (Top-Right) to Home (Bottom-Center)
+      // Enters from the top
       return `M ${start.x} ${start.y + 5} C ${start.x} ${start.y + 40}, ${end.x + 10} ${end.y - 40}, ${end.x} ${end.y - 10}`
     }
     if (source === 'battery') {
       // Battery (Bottom-Left) to Home (Bottom-Center)
-      return `M ${start.x + 8} ${start.y} C ${start.x + 20} ${start.y}, ${end.x - 20} ${end.y}, ${end.x - 8} ${end.y}`
+      // Enters from the LEFT.
+      // FIXED: Reduced offset from 8 to 3.5 to account for wide aspect ratio.
+      // This ensures the line reaches the circle boundary instead of stopping short.
+      return `M ${start.x + 3.5} ${start.y} C ${start.x + 15} ${start.y}, ${end.x - 15} ${end.y}, ${end.x - 3.5} ${end.y}`
     }
     return ''
   }
@@ -127,7 +132,7 @@ export default function EnergyFlow({
             </div>
             <div className="mt-2 text-center bg-gray-900/90 backdrop-blur px-3 py-1 rounded-lg border border-gray-700 shadow-xl">
               <p className="text-xs text-gray-400">Total Load</p>
-              <p className="text-xl font-bold text-white">{homeConsumption.toFixed(2)} kW</p>
+              <p className="text-xl font-bold text-white">{homeConsumption.toFixed(2)} W</p>
             </div>
           </div>
         </div>
@@ -164,10 +169,10 @@ function AnimatedWire({ path, color, isActive }: { path: string, color: string, 
         strokeWidth="4"
         strokeDasharray="10 120" // Short dash (packet), long gap
         strokeLinecap="round"
-        // ANIMATION FIX: 'strokeDashoffset' moves from positive to negative to flow forward
+        // Flow Animation: Moves from 0 to negative to simulate flow TOWARDS home
         animate={{ strokeDashoffset: [0, -130] }}
         transition={{
-          duration: 1.5, // Adjust speed here
+          duration: 1.5,
           repeat: Infinity,
           ease: "linear"
         }}
@@ -196,7 +201,7 @@ function Node({ pos, icon, label, value, active, color, bg }: any) {
         {icon}
         <div>
           <p className="text-xs font-medium uppercase tracking-wider">{label}</p>
-          <p className="text-lg font-bold tabular-nums">{value.toFixed(2)} kW</p>
+          <p className="text-lg font-bold tabular-nums">{value.toFixed(2)} W</p>
         </div>
       </div>
     </motion.div>

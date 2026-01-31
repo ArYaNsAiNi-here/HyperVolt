@@ -9,7 +9,7 @@
 # ============================================
 
 # Core Django
-Django>=6.0rc1,<5.1
+Django<=6.0rc1,>5.1
 django-environ>=0.11.0
 
 # REST Framework

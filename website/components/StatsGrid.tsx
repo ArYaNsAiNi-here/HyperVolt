@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { TrendingDown, Leaf, DollarSign, Zap } from 'lucide-react'
+import { TrendingDown, Leaf, IndianRupee, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface StatCardProps {
@@ -116,13 +116,13 @@ export default function StatsGrid({ carbonSavings, costSavings, powerConsumption
         value={costSavings.toFixed(2)}
         unit="₹"
         change={-8.3}
-        icon={<DollarSign className="w-6 h-6" />}
+        icon={<IndianRupee className="w-6 h-6" />}
         color="yellow"
       />
       <StatCard
         title="Power Consumption"
         value={powerConsumption.toFixed(2)}
-        unit="kW"
+        unit="W"
         icon={<Zap className="w-6 h-6" />}
         color="blue"
       />

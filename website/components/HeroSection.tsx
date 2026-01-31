@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Sun, Battery, Plug } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
 const DigitalTwin = dynamic(() => import('@/components/DigitalTwin'), {
@@ -24,6 +24,26 @@ interface HeroSectionProps {
   onScrollClick: () => void
 }
 
+// Map active source to its associated color for the radial background
+const sourceColors: Record<'solar' | 'battery' | 'grid', string> = {
+  solar: '#4ade80',    // Green for solar
+  battery: '#facc15',  // Yellow for battery
+  grid: '#f87171',     // Red for grid
+}
+
+// Map active source to labels and icons
+const sourceLabels: Record<'solar' | 'battery' | 'grid', string> = {
+  solar: 'Solar',
+  battery: 'Battery',
+  grid: 'Grid',
+}
+
+const sourceIcons: Record<'solar' | 'battery' | 'grid', React.ReactNode> = {
+  solar: <Sun className="w-4 h-4" />,
+  battery: <Battery className="w-4 h-4" />,
+  grid: <Plug className="w-4 h-4" />,
+}
+
 export default function HeroSection({
   lightIntensity,
   activeSource,
@@ -31,9 +51,19 @@ export default function HeroSection({
   weatherCondition,
   onScrollClick,
 }: HeroSectionProps) {
+  const activeColor = sourceColors[activeSource]
+
   return (
     // CHANGE 1: Use h-[100dvh] instead of h-screen to account for mobile browser bars
     <section className="relative w-full h-dvh">
+      {/* Radial background glow based on active energy source */}
+      <div
+        className="absolute inset-0 pointer-events-none transition-all duration-1000"
+        style={{
+          background: `radial-gradient(circle at center, ${activeColor}50 0%, ${activeColor}30 25%, ${activeColor}15 50%, transparent 75%)`,
+        }}
+      />
+
       {/* Full viewport 3D model */}
       <div className="absolute inset-0 w-full h-full">
         <DigitalTwin
@@ -47,6 +77,32 @@ export default function HeroSection({
 
       {/* Overlay with branding */}
       <div className="absolute inset-0 pointer-events-none">
+        {/* Active energy source indicator badge */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.8, duration: 0.5 }}
+          className="absolute top-4 left-4 z-20 pointer-events-auto"
+        >
+          <div
+            className="flex items-center gap-2 px-4 py-2 rounded-full backdrop-blur-md border shadow-lg transition-all duration-500"
+            style={{
+              backgroundColor: `${activeColor}20`,
+              borderColor: `${activeColor}50`,
+              color: activeColor,
+            }}
+          >
+            {sourceIcons[activeSource]}
+            <span className="text-sm font-medium">
+              {sourceLabels[activeSource]} Active
+            </span>
+            <div
+              className="w-2 h-2 rounded-full animate-pulse"
+              style={{ backgroundColor: activeColor }}
+            />
+          </div>
+        </motion.div>
+
         {/* CHANGE 2:
             - Reduced base padding to p-4 for smaller screens
             - Added pb-20 (padding-bottom) specifically to lift the bottom button up away from the address bar/home indicator

@@ -11,6 +11,7 @@ import { StrategyLogEntry } from '@/lib/types'
 interface StrategyNarratorProps {
   initialLogs?: StrategyLogEntry[]
   className?: string
+  onLogCountChange?: (count: number) => void
   // 'logs' prop removed or made optional if you passed it from parent,
   // but we will manage state internally via polling.
 }
@@ -63,12 +64,17 @@ function LogItem({ log }: { log: StrategyLogEntry }) {
   )
 }
 
-export default function StrategyNarrator({ initialLogs = [], className }: StrategyNarratorProps) {
+export default function StrategyNarrator({ initialLogs = [], className, onLogCountChange }: StrategyNarratorProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [logs, setLogs] = useState<StrategyLogEntry[]>(initialLogs)
 
   // Track IDs we've already seen to prevent duplicates
   const processedIds = useRef<Set<string>>(new Set(initialLogs.map(l => l.id)))
+
+  // Notify parent of log count changes
+  useEffect(() => {
+    onLogCountChange?.(logs.length)
+  }, [logs.length, onLogCountChange])
 
   // --- POLLING LOGIC ---
   const fetchRecentDecisions = useCallback(async () => {

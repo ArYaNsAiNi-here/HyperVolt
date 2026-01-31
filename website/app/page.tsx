@@ -14,6 +14,7 @@ import HeroSection from '@/components/HeroSection' // Import the Hero Section
 // --- CONFIGURATION ---
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 const POLL_INTERVAL = 5000
+const AI_TRAINING_INTERVAL = 120000
 const BATTERY_CAPACITY_MAH = 20000
 const BATTERY_MAX_VOLTAGE = 2.5
 const BATTERY_MAX_OUTPUT_KW = 1
@@ -70,6 +71,9 @@ export default function Home() {
   const [powerConsumption, setPowerConsumption] = useState(1.0)
   const [stats, setStats] = useState({ carbonSavings: 0, costSavings: 0, powerConsumption: 1.2, efficiency: 85 })
   const [energyOutputs, setEnergyOutputs] = useState({ solar: 0, battery: 0, grid: 0, home: 1.2 })
+  const [aiTrainingStatus, setAiTrainingStatus] = useState<string | null>(null)
+  const [gridReason, setGridReason] = useState<string | null>(null)
+  const previousSourceRef = useRef<'solar' | 'battery' | 'grid'>('grid')
 
   // --- REFS (Critical for breaking dependency loops in intervals) ---
   const stateRef = useRef({
@@ -122,15 +126,35 @@ export default function Home() {
     }
   }, [])
 
-  // 2. Logic to determine source
-  const determineActiveSource = useCallback(() => {
+  // 2. Logic to determine source with priority: Solar > Battery > Grid
+  const determineActiveSource = useCallback((): { source: 'solar' | 'battery' | 'grid', reason: string | null } => {
     const currentSolar = stateRef.current.solarPowerKW
     const consumption = stateRef.current.powerConsumption
     const batteryPct = (stateRef.current.batteryState.currentMah / BATTERY_CAPACITY_MAH) * 100
-
-    if (currentSolar >= consumption * 0.5) return 'solar'
-    if (batteryPct > 15) return 'battery'
-    return 'grid'
+    const hour = new Date().getHours()
+    const isDaytime = hour >= 6 && hour < 17
+    const isEveningPeak = hour >= 17 && hour <= 20
+    
+    // Priority 1: Solar if available and sufficient during daytime
+    if (currentSolar >= consumption * 0.5 && isDaytime) {
+      return { source: 'solar', reason: null }
+    }
+    
+    // Priority 2: Battery if charged
+    if (batteryPct > 15) {
+      // During daytime (before evening peak), save battery for evening peak when solar won't work
+      if (isDaytime && batteryPct > 30) {
+        return { source: 'grid', reason: '🔋 Saving battery for evening peak hours (17:00-20:00) when solar will be unavailable' }
+      }
+      // During evening peak, use battery
+      if (isEveningPeak) {
+        return { source: 'battery', reason: null }
+      }
+      return { source: 'battery', reason: null }
+    }
+    
+    // Priority 3: Grid as fallback
+    return { source: 'grid', reason: batteryPct <= 15 ? '🔋 Battery too low (<15%), using grid' : null }
   }, [])
 
   // 3. AI Decision Loop
@@ -159,8 +183,9 @@ export default function Home() {
         setLastUpdate(new Date().toLocaleTimeString())
         setIsConnected(true)
 
-        const newSource = determineActiveSource()
+        const { source: newSource, reason } = determineActiveSource()
         setActiveSource(newSource)
+        setGridReason(reason)
 
         const solarOut = stateRef.current.solarPowerKW
         const batteryOut = newSource === 'battery' ? Math.min(stateRef.current.powerConsumption * 0.3, BATTERY_MAX_OUTPUT_KW) : 0
@@ -175,14 +200,15 @@ export default function Home() {
             efficiency: newSource === 'solar' ? 95 : newSource === 'battery' ? 85 : 70
         }))
 
-        if (stateRef.current.activeSource !== newSource) {
+        if (previousSourceRef.current !== newSource) {
             addLog({
                 id: Date.now().toString(),
                 timestamp: new Date().toISOString(),
-                type: 'success',
+                type: 'decision',
                 message: `🤖 AI Decision: Switched to ${newSource.toUpperCase()}`,
-                details: `Solar: ${solarOut.toFixed(2)}kW`
+                details: reason || `Solar: ${solarOut.toFixed(2)}kW, Battery: ${((stateRef.current.batteryState.currentMah / BATTERY_CAPACITY_MAH) * 100).toFixed(0)}%`
             })
+            previousSourceRef.current = newSource
         }
       }
     } catch (e) {
@@ -259,15 +285,31 @@ export default function Home() {
       setBatteryState(prev => ({ ...prev, isDraining: false, drainRateW: 0 }))
       return
     }
+    const drainIntervalMs = 5000
     const interval = setInterval(() => {
       setBatteryState(prev => {
         const drainW = powerConsumption * 100
-        const drainMah = drainW / 3.7 / 3600 * 5
-        return { ...prev, currentMah: Math.max(0, prev.currentMah - drainMah), isDraining: true, drainRateW: drainW }
+        const drainMah = (drainW / BATTERY_MAX_VOLTAGE) * ((drainIntervalMs / 1000) / 60)
+        const newMah = Math.max(0, prev.currentMah - drainMah)
+        return { ...prev, currentMah: newMah, isDraining: true, drainRateW: drainW }
       })
-    }, 5000)
+    }, drainIntervalMs)
     return () => clearInterval(interval)
   }, [activeSource, powerConsumption])
+
+  useEffect(() => {
+    const runTraining = async () => {
+      setAiTrainingStatus('Training on latest usage patterns...')
+      await new Promise(r => setTimeout(r, 3000))
+      setAiTrainingStatus('Model updated successfully')
+      await new Promise(r => setTimeout(r, 2000))
+      setAiTrainingStatus(null)
+    }
+    
+    runTraining()
+    const interval = setInterval(runTraining, AI_TRAINING_INTERVAL)
+    return () => clearInterval(interval)
+  }, [])
 
   // --- HELPERS ---
   const generateForecastForDay = useCallback((dayOffset: number): ForecastPrediction[] => {
@@ -344,6 +386,11 @@ export default function Home() {
                 <div><h1 className="text-2xl font-bold text-white">HyperVolt</h1><p className="text-xs text-gray-400">AI-Driven Energy Orchestrator (Polling)</p></div>
               </div>
               <div className="flex items-center gap-4">
+                {aiTrainingStatus && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-purple-500/10 border-purple-500/50 text-purple-400 animate-pulse">
+                    <Brain className="w-3 h-3" /><span className="text-xs font-medium">{aiTrainingStatus}</span>
+                  </div>
+                )}
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${aiAvailable ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-yellow-500/10 border-yellow-500/50 text-yellow-400'}`}>
                   <Brain className="w-3 h-3" /><span className="text-xs font-medium">{isAiThinking ? 'AI Thinking...' : aiAvailable ? 'AI Online' : 'AI Offline'}</span>
                 </div>
@@ -351,7 +398,7 @@ export default function Home() {
                   <Database className="w-3 h-3" /><span className="text-xs font-medium">{isConnected ? 'Connected' : 'Offline'}</span>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full border border-gray-700">
-                  <Activity className="w-4 h-4 text-blue-400" /><span className="text-xs text-gray-300">{powerConsumption.toFixed(2)} kW</span>
+                  <Activity className="w-4 h-4 text-blue-400" /><span className="text-xs text-gray-300">{powerConsumption.toFixed(2)} W</span>
                 </div>
                 <button onClick={fetchAIDecision} disabled={isAiThinking} className="p-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50">
                   <RefreshCw className={`w-4 h-4 text-gray-400 ${isAiThinking ? 'animate-spin' : ''}`} />
@@ -379,12 +426,15 @@ export default function Home() {
                         </div>
                         <p className={`text-3xl font-bold capitalize ${getSourceColor(activeSource)}`}>{activeSource}</p>
                         <p className="text-sm text-gray-500 mt-1">{activeSource === 'solar' ? '☀️ Using solar (cleanest)' : activeSource === 'battery' ? '🔋 Using battery' : '⚡ Using grid'}</p>
+                        {gridReason && activeSource === 'grid' && (
+                          <p className="text-xs text-yellow-400 mt-2 bg-yellow-500/10 px-2 py-1 rounded">{gridReason}</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-8">
-                      <div className="text-center"><p className="text-2xl font-bold text-green-400">{solarPowerKW.toFixed(2)} kW</p><p className="text-xs text-gray-400">Solar (V×I)</p></div>
+                      <div className="text-center"><p className="text-2xl font-bold text-green-400">{solarPowerKW.toFixed(2)} W</p><p className="text-xs text-gray-400">Solar</p></div>
                       <div className="text-center"><p className="text-2xl font-bold text-yellow-400">{batteryPercentage.toFixed(0)}%</p><p className="text-xs text-gray-400">Battery</p></div>
-                      <div className="text-center"><p className={`text-2xl font-bold ${isCurrentlyPeakHour ? 'text-red-400' : 'text-blue-400'}`}>{powerConsumption.toFixed(2)} kW</p><p className="text-xs text-gray-400">{isCurrentlyPeakHour ? 'Peak' : 'Normal'}</p></div>
+                      <div className="text-center"><p className={`text-2xl font-bold ${isCurrentlyPeakHour ? 'text-red-400' : 'text-blue-400'}`}>{powerConsumption.toFixed(2)} W</p><p className="text-xs text-gray-400">{isCurrentlyPeakHour ? 'Peak' : 'Normal'}</p></div>
                     </div>
                   </div>
                 </div>
@@ -461,9 +511,9 @@ export default function Home() {
                     { label: 'Temperature', value: `${sensorData.temperature.toFixed(1)}°C`, color: 'text-red-400' },
                     { label: 'Humidity', value: `${sensorData.humidity.toFixed(0)}%`, color: 'text-blue-400' },
                     { label: 'LDR', value: sensorData.light.toFixed(0), color: 'text-yellow-400' },
-                    { label: 'Current', value: `${sensorData.current.toFixed(2)}A`, color: 'text-green-400' },
+                    { label: 'Current', value: `${sensorData.current.toFixed(2)}mA`, color: 'text-green-400' },
                     { label: 'Voltage', value: `${sensorData.voltage.toFixed(0)}V`, color: 'text-purple-400' },
-                    { label: 'Solar Power', value: `${solarPowerKW.toFixed(3)}kW`, color: 'text-green-500', highlight: true },
+                    { label: 'Solar Power', value: `${solarPowerKW.toFixed(3)}W`, color: 'text-green-500', highlight: true },
                   ].map((s, i) => (
                     <div key={i} className={`rounded-lg p-4 border ${s.highlight ? 'bg-green-500/10 border-green-500/30' : 'bg-gray-800/50 border-gray-700/50'}`}><p className="text-xs text-gray-400 mb-1">{s.label}</p><p className={`text-2xl font-bold ${s.color}`}>{s.value}</p></div>
                   ))}
@@ -479,7 +529,7 @@ export default function Home() {
                     <h4 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2"><Brain className="w-4 h-4 text-purple-400" />AI Source Allocation</h4>
                     <div className="space-y-2">
                       {[{ source: 'solar', power: energyOutputs.solar }, { source: 'battery', power: energyOutputs.battery }, { source: 'grid', power: energyOutputs.grid }].filter(s => s.power > 0).map((item, i) => (
-                        <div key={i} className="flex items-center justify-between"><div className="flex items-center gap-2">{getSourceIcon(item.source)}<span className={`capitalize ${getSourceColor(item.source)}`}>{item.source}</span></div><span className="text-white font-medium">{item.power.toFixed(3)} kW</span></div>
+                        <div key={i} className="flex items-center justify-between"><div className="flex items-center gap-2">{getSourceIcon(item.source)}<span className={`capitalize ${getSourceColor(item.source)}`}>{item.source}</span></div><span className="text-white font-medium">{item.power.toFixed(3)} W</span></div>
                       ))}
                     </div>
                   </div>

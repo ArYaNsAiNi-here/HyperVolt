@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Zap, TrendingDown, TrendingUp, Activity, DollarSign, Leaf } from 'lucide-react'
+import { Zap, TrendingDown, TrendingUp, Activity, IndianRupee, Leaf } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface LiveMetric {
@@ -33,7 +33,7 @@ export default function RealTimeMetrics({
     {
       label: 'Live Power',
       value: powerConsumption.toFixed(2),
-      unit: 'kW',
+      unit: 'W',
       trend: powerConsumption > 1.5 ? 'up' : 'down',
       icon: <Zap className="w-4 h-4" />,
       color: 'blue',
@@ -43,7 +43,7 @@ export default function RealTimeMetrics({
       value: costRate.toFixed(2),
       unit: '₹/hr',
       trend: costRate < 5 ? 'down' : 'up',
-      icon: <DollarSign className="w-4 h-4" />,
+      icon: <IndianRupee className="w-4 h-4" />,
       color: 'yellow',
     },
     {

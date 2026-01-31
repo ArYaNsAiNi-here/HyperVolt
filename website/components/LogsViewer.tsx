@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronUp, ChevronDown, List, X } from 'lucide-react'
 import { StrategyLogEntry } from '@/lib/types'
@@ -13,22 +13,29 @@ interface LogsViewerProps {
 export default function LogsViewer({ logs }: LogsViewerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [actualLogCount, setActualLogCount] = useState(logs.length)
+
+  const handleLogCountChange = useCallback((count: number) => {
+    setActualLogCount(count)
+  }, [])
 
   return (
     <>
-      {/* Floating Toggle Button (Visible when closed) */}
-      <AnimatePresence>
-        {!isOpen && (
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-50 bg-purple-600 hover:bg-purple-500 text-white p-4 rounded-full shadow-lg border border-purple-400/30 backdrop-blur-sm transition-all hover:scale-105 group"
-          >
-            <List className="w-6 h-6" />
-            <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity pointer-events-none">
-              View AI Logs
+      {/* Floating toggle button */}
+      <motion.button
+        initial={{ opacity: 0, scale: 0 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-6 right-6 z-50 p-4 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full shadow-2xl hover:shadow-purple-500/50 transition-all duration-300"
+        aria-label="Toggle logs viewer"
+      >
+      <div className="relative">
+          <Terminal className="w-6 h-6 text-white" />
+          {actualLogCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+              {actualLogCount > 99 ? '99+' : actualLogCount}
             </span>
           </motion.button>
         )}
@@ -53,8 +60,13 @@ export default function LogsViewer({ logs }: LogsViewerProps) {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-gray-800/50 border-b border-gray-700">
               <div className="flex items-center gap-2">
-                <List className="w-4 h-4 text-purple-400" />
-                <span className="font-semibold text-white">System Logs</span>
+                <Terminal className="w-5 h-5 text-purple-400" />
+                <h3 className="text-lg font-semibold text-white">
+                  System Logs
+                </h3>
+                <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded">
+                  {actualLogCount} events
+                </span>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -73,13 +85,9 @@ export default function LogsViewer({ logs }: LogsViewerProps) {
               </div>
             </div>
 
-            {/* Content Area */}
-            <div className={isExpanded ? 'flex-1 min-h-0' : 'h-96'}>
-              {/* FIX: Removed the 'logs' prop since StrategyNarrator now polls internally */}
-              <StrategyNarrator
-                className="h-full border-0 bg-transparent"
-                initialLogs={logs} // Optional: Pass initial logs if you want to preload some
-              />
+            {/* Logs content */}
+            <div className={isExpanded ? 'h-[calc(100%-56px)]' : 'h-96'}>
+              <StrategyNarrator initialLogs={logs} className="h-full" onLogCountChange={handleLogCountChange} />
             </div>
           </motion.div>
         )}
